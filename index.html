@@ -18,6 +18,7 @@
 .baddr{text-align:center;margin-top:10px;color:#c0392b;font-weight:bold}
 #printArea{display:none}.dlines div{margin:14px 0;font-size:13px}.dots{display:inline-block;border-bottom:1px dotted #444;min-width:180px;height:14px;vertical-align:bottom}.dlines div:nth-child(n+2) .dots{min-width:60%}
 @media print{
+ .pl-break{page-break-after:always;break-after:page}.pl-break:last-child{page-break-after:auto;break-after:auto}
  body>*:not(#printArea){display:none!important}
  #printArea{display:block!important;padding:0}
  @page{size:A4;margin:10mm}
@@ -275,7 +276,7 @@ prices:()=>{
   if(!priceDest){
     const legacy=db.items.filter(x=>!normD(x.dest)).length;
     const chips=dests.map(d=>btn(esc(d)+' <small>('+itemsOfDest(d).length+' بند)</small>',`pickDest(decodeURIComponent('${qd(d)}'))`,'soft')).join('')||'<span style="color:#73849B;font-size:12px">لا توجد وجهات بعد، أضف أول وجهة من تحت</span>';
-    return pageHead('قائمة الأسعار','حدد الوجهة الأول، وبعدها تظهر لك قائمة أسعارها')+
+    return pageHead('قائمة الأسعار','حدد الوجهة الأول، وبعدها تظهر لك قائمة أسعارها',btn('🖨 طباعة كل الوجهات','printAllPriceLists()','soft'))+
     (legacy?`<div class="notice">عندك <b>${legacy}</b> بند قديم مش مربوط بوجهة (وبالتالي مش هيظهروا في البوليصة). ${btn('نقلهم لوجهة','moveLegacy()','soft')}</div>`:'')+
     `<div class="panel"><div class="panelhead"><h3>اختار الوجهة</h3><small>اضغط على الوجهة لفتح قائمة أسعارها</small></div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">${chips}</div>
@@ -291,7 +292,7 @@ prices:()=>{
     <td><input type="number" min="0" value="${x.both}" onchange="setP(${i},'both',this.value)"></td>
     <td>${btn('حذف',`delP(${i})`,'')}</td></tr>`).join('')||emptyRow(6,'لا توجد بنود للوجهة دي، اضغط "إضافة بند" أو "نسخ من وجهة أخرى"');
   return pageHead('أسعار وجهة: '+esc(priceDest),'لكل بند: سعر الشحن + تكلفة كل حالة (تغليف / تخشيب / الاتنين مع بعض)',
-    btn('→ تغيير الوجهة','changeDest()','')+btn('نسخ من وجهة أخرى','copyFromDest()','soft')+btn('＋ إضافة بند','addP()')+btn('حذف الوجهة','delDest()',''))+
+    btn('→ تغيير الوجهة','changeDest()','')+btn('🖨 طباعة القائمة','printPriceList()','soft')+btn('نسخ من وجهة أخرى','copyFromDest()','soft')+btn('＋ إضافة بند','addP()')+btn('حذف الوجهة','delDest()',''))+
   `<div class="notice">الأسعار دي خاصة بوجهة <b>${esc(priceDest)}</b> بس. في البوليصة، أول ما تكتب الوجهة دي بتنزل بنودها وأسعارها تلقائي، والإجمالي = سعر الشحن + تكلفة الحالة اللي اخترتها.</div>
   <div class="panel"><div class="tablewrap"><table><thead><tr><th>البيان</th><th>سعر الشحن</th><th>تكلفة التغليف</th><th>تكلفة التخشيب</th><th>تخشيب + تغليف</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 },
@@ -831,6 +832,24 @@ function payReceipt(i){
   $('.modal').style.width='min(820px,100%)';
 }
 function printArea(html){$('#printArea').innerHTML=html;window.print()}
+
+/* ---------- print price lists ---------- */
+function priceListHTML(d){
+  const its=itemsOfDest(d);
+  const rows=its.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.item)}</td><td>${num(x.price)}</td><td>${num(x.pack)}</td><td>${num(x.crate)}</td><td>${num(x.both)}</td></tr>`).join('')||'<tr><td colspan="6">لا توجد بنود لهذه الوجهة</td></tr>';
+  return `<div class="bill pl-break">
+  <div class="bhead"><img src="${LOGO}" alt=""><div class="bcenter"><b>شركة تساهيل للشحن الدولي</b><span>مصر ⇄ السودان</span></div><div class="btitle">قائمة أسعار<small>${esc(d)}</small></div></div>
+  <div class="bgrid"><div>الوجهة: <u>${esc(d)}</u></div><div>التاريخ: <u>${today()}</u></div><div>عدد البنود: <u>${its.length}</u></div><div></div></div>
+  <table style="text-align:center"><thead><tr><th>#</th><th>البيان</th><th>سعر الشحن</th><th>تكلفة التغليف</th><th>تكلفة التخشيب</th><th>تخشيب + تغليف</th></tr></thead><tbody>${rows}</tbody></table>
+  <p class="bfoot">الأسعار بالجنيه. إجمالي البند = سعر الشحن + تكلفة الحالة المختارة (تغليف / تخشيب / الاثنين معاً).</p>
+  <p class="bfoot">${esc(db.settings.note)}</p>
+  <div class="baddr">العنوان: ${esc(db.settings.addr)}</div></div>`}
+function printPriceList(){if(!priceDest)return;printArea(priceListHTML(priceDest))}
+function printAllPriceLists(){
+  const ds=destsAll().filter(d=>itemsOfDest(d).length);
+  if(!ds.length){toast('مفيش وجهات فيها بنود للطباعة');return}
+  printArea(ds.map(priceListHTML).join(''))}
+
 
 /* ---------- init ---------- */
 document.querySelectorAll('.brandmark img').forEach(i=>i.src=LOGO);
