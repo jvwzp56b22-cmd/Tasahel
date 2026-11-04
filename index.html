@@ -92,7 +92,7 @@ let db;
 
 if(!db||!db.customers) db=JSON.parse(JSON.stringify(DEFAULT));
 db.warehouses=db.warehouses||[{id:1,name:'مخزن 1',country:'EG'},{id:2,name:'مخزن 2',country:'EG'}];
-db.seq=db.seq||{cust:1,bill:1};db.seq.wh=db.seq.wh||3;db.seq.trip=db.seq.trip||1;db.trips=db.trips||[];
+db.seq=db.seq||{cust:1,bill:1};if(!Array.isArray(db.seq.dests))db.seq.dests=CITIES.slice();db.seq.wh=db.seq.wh||3;db.seq.trip=db.seq.trip||1;db.trips=db.trips||[];
 let whTab='EG';
 if(!db.items){db.items=[];(db.prices||[]).forEach(p=>{let x=db.items.find(y=>y.item===p.item);if(!x){x={item:p.item,price:+p.price||0,pack:0,crate:0,both:0};db.items.push(x)}
   const st=p.status||'';const k=(st.includes('تخشيب')&&st.includes('تغليف'))?'both':st.includes('تخشيب')?'crate':st.includes('تغليف')?'pack':null;if(k)x[k]=+p.stateCost||0});
@@ -136,9 +136,16 @@ let current='customers',curCust=null,lastBill=null,curWh=null,curTrip=null;
 
 /* ---------- helpers ---------- */
 const STATES=[['pack','تغليف'],['crate','تخشيب'],['both','تخشيب + تغليف']];
-const itemsList=()=>db.items.map(x=>x.item);
-const findItem=it=>db.items.find(x=>x.item===it);
-const statusOpts=it=>{const x=findItem(it);return x?STATES.map(([k,n])=>({status:n,cost:+x[k]||0})):[]};
+/* ---- destinations: each destination has its own price list ---- */
+const normD=v=>String(v==null?'':v).trim();
+const qd=v=>encodeURIComponent(v).replace(/'/g,'%27');
+const destsAll=()=>{const a=(db.seq&&Array.isArray(db.seq.dests)?db.seq.dests:[]).map(normD).filter(Boolean);
+  db.items.forEach(x=>{const d=normD(x.dest);if(d&&!a.includes(d))a.push(d)});return a};
+const billDest=()=>{const e=$('#bCity');return e?normD(e.value):''};
+const itemsOfDest=d=>db.items.filter(x=>normD(x.dest)===normD(d));
+const itemsList=()=>itemsOfDest(billDest()).map(x=>x.item);
+const findItem=(it,d)=>{const dd=d===undefined?billDest():normD(d);return db.items.find(x=>x.item===it&&normD(x.dest)===dd)};
+const statusOpts=(it,d)=>{const x=findItem(it,d);return x?STATES.map(([k,n])=>({status:n,cost:+x[k]||0})):[]};
 const dl=(id,arr)=>`<datalist id="${id}">${arr.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
 const custTotal=c=>c.shipments.reduce((s,x)=>s+x.total,0);
 const custPaid=c=>c.payments.reduce((s,x)=>s+x.amount,0);
@@ -160,13 +167,16 @@ function openModal(title,body,onSave,saveText='حفظ'){
 function closeModal(){$('#modalback').classList.remove('show');modalSave=null}
 
 /* ---------- navigation ---------- */
+let priceDest='',keepDest=false;
+function refreshPrices(){keepDest=true;go('prices')}
 function go(p){
-  current=p;
+  const prevPage=current;current=p;
+  if(p==='prices'){if(!keepDest&&prevPage!=='prices')priceDest='';keepDest=false}
   const navKey=(p==='customer'||p==='bill')?'customers':(p==='warehouse'?'warehouses':(p==='trip'?'trips':p));
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===navKey));
   $('#crumb').textContent=names[p]||'';
   try{$('#content').innerHTML='<div class="view">'+(pages[p]||pages.soon)()+'</div>'}catch(err){console.error(err);$('#content').innerHTML='<div class="notice">حصل خطأ في عرض الصفحة. ارجع للرئيسية أو خد نسخة احتياطية وبلّغ الدعم.<br><small dir="ltr">'+esc(err.message)+'</small></div>'}
-  if(p==='bill') recalcAll();
+  if(p==='bill'){recalcAll();const bc=$('#bCity');if(bc)bc.focus()}
   window.scrollTo(0,0);$('#sidebar').classList.remove('open');
 }
 
@@ -260,15 +270,29 @@ customers:()=>{
   <div class="panel"><div class="tablewrap"><table id="ctable"><thead><tr><th>كود العميل</th><th>الاسم</th><th>رقم الهاتف</th><th>العنوان</th><th>الإجمالي</th><th>المدفوع</th><th>الحالة</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 },
 prices:()=>{
-  const rows=db.items.map((x,i)=>`<tr>
+  const dests=destsAll();
+  if(priceDest&&!dests.includes(priceDest))priceDest='';
+  if(!priceDest){
+    const legacy=db.items.filter(x=>!normD(x.dest)).length;
+    const chips=dests.map(d=>btn(esc(d)+' <small>('+itemsOfDest(d).length+' بند)</small>',`pickDest(decodeURIComponent('${qd(d)}'))`,'soft')).join('')||'<span style="color:#73849B;font-size:12px">لا توجد وجهات بعد، أضف أول وجهة من تحت</span>';
+    return pageHead('قائمة الأسعار','حدد الوجهة الأول، وبعدها تظهر لك قائمة أسعارها')+
+    (legacy?`<div class="notice">عندك <b>${legacy}</b> بند قديم مش مربوط بوجهة (وبالتالي مش هيظهروا في البوليصة). ${btn('نقلهم لوجهة','moveLegacy()','soft')}</div>`:'')+
+    `<div class="panel"><div class="panelhead"><h3>اختار الوجهة</h3><small>اضغط على الوجهة لفتح قائمة أسعارها</small></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">${chips}</div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid #edf1f6;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="newDest" placeholder="اسم وجهة جديدة" onkeydown="if(event.key==='Enter')addDest()" style="padding:10px 12px;border:1px solid #dce5f0;border-radius:9px;min-width:220px;font:inherit">
+      ${btn('＋ إضافة الوجهة وفتح قائمتها','addDest()')}</div></div>`;
+  }
+  const rows=db.items.map((x,i)=>normD(x.dest)!==priceDest?'':`<tr>
     <td><input value="${esc(x.item)}" onchange="setP(${i},'item',this.value)"></td>
     <td><input type="number" min="0" value="${x.price}" onchange="setP(${i},'price',this.value)"></td>
     <td><input type="number" min="0" value="${x.pack}" onchange="setP(${i},'pack',this.value)"></td>
     <td><input type="number" min="0" value="${x.crate}" onchange="setP(${i},'crate',this.value)"></td>
     <td><input type="number" min="0" value="${x.both}" onchange="setP(${i},'both',this.value)"></td>
-    <td>${btn('حذف',`delP(${i})`,'')}</td></tr>`).join('')||emptyRow(6,'لا توجد بنود، اضغط "إضافة بند"');
-  return pageHead('قائمة الأسعار','لكل بند: سعر الشحن + تكلفة كل حالة (تغليف / تخشيب / الاتنين مع بعض)',btn('＋ إضافة بند','addP()'))+
-  `<div class="notice">في البوليصة، بعد اختيار البند بتظهر لك الحالات دي تختار منها، والإجمالي = سعر الشحن + تكلفة الحالة اللي اخترتها.</div>
+    <td>${btn('حذف',`delP(${i})`,'')}</td></tr>`).join('')||emptyRow(6,'لا توجد بنود للوجهة دي، اضغط "إضافة بند" أو "نسخ من وجهة أخرى"');
+  return pageHead('أسعار وجهة: '+esc(priceDest),'لكل بند: سعر الشحن + تكلفة كل حالة (تغليف / تخشيب / الاتنين مع بعض)',
+    btn('→ تغيير الوجهة','changeDest()','')+btn('نسخ من وجهة أخرى','copyFromDest()','soft')+btn('＋ إضافة بند','addP()')+btn('حذف الوجهة','delDest()',''))+
+  `<div class="notice">الأسعار دي خاصة بوجهة <b>${esc(priceDest)}</b> بس. في البوليصة، أول ما تكتب الوجهة دي بتنزل بنودها وأسعارها تلقائي، والإجمالي = سعر الشحن + تكلفة الحالة اللي اخترتها.</div>
   <div class="panel"><div class="tablewrap"><table><thead><tr><th>البيان</th><th>سعر الشحن</th><th>تكلفة التغليف</th><th>تكلفة التخشيب</th><th>تخشيب + تغليف</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 },
 customer:()=>{
@@ -287,9 +311,9 @@ bill:()=>{
   billRowIds=[0,1,2,3,4,5];billRowSeq=6;
   const rows=billRowIds.map(billRowHTML).join('');
   return pageHead('بوليصة شحن جديدة',esc(c.name)+' · '+esc(c.code),btn('→ رجوع',"openCustomer(curCust)",''))+
-  dl('citiesDL',CITIES)+
+  dl('citiesDL',destsAll())+
   `<div class="panel" style="margin-bottom:16px"><div class="formgrid">
-    ${field('الوجهة (اكتب أو اختار)',`<input id="bCity" list="citiesDL" placeholder="الخرطوم">`)}
+    ${field('الوجهة (اكتب أو اختار) — الأسعار بتنزل تلقائي حسب الوجهة',`<input id="bCity" list="citiesDL" placeholder="الخرطوم" oninput="onDestChange()" onchange="onDestChange()" autocomplete="off"><small id="destHint" style="display:block;margin-top:5px;color:#1d67bd;font-size:11px">اختار الوجهة الأول</small>`)}
     ${field('التاريخ',`<input id="bDate" type="date" value="${today()}">`)}
     ${field('رقم الشحنة',`<input id="bNo" value="${String(db.seq.bill).padStart(6,'0')}">`)}
     ${field('المرسل',`<input id="bSender" value="${esc(c.name)}">`)}
@@ -513,12 +537,40 @@ function delPay(i){const c=db.customers[curCust];if(!c||!c.payments[i])return;
 
 /* ---------- prices ---------- */
 function setP(i,k,v){
-  if(k==='item'){v=v.trim();if(!v){toast('اسم البند لا يمكن أن يكون فاضي');go('prices');return}
-    if(db.items.some((x,j)=>j!==i&&x.item===v)){toast('البند ده موجود قبل كده');go('prices');return}db.items[i].item=v}
+  if(k==='item'){v=v.trim();if(!v){toast('اسم البند لا يمكن أن يكون فاضي');refreshPrices();return}
+    if(db.items.some((x,j)=>j!==i&&x.item===v&&normD(x.dest)===normD(db.items[i].dest))){toast('البند ده موجود قبل كده في الوجهة دي');refreshPrices();return}db.items[i].item=v}
   else db.items[i][k]=Math.max(+v||0,0);
-  save();go('prices')}
-function addP(){let n='بند جديد',c=1;while(db.items.some(x=>x.item===n))n='بند جديد '+(++c);db.items.push({item:n,price:0,pack:0,crate:0,both:0});save();go('prices')}
-function delP(i){db.items.splice(i,1);save();go('prices')}
+  save();refreshPrices()}
+function addP(){let n='بند جديد',c=1;while(db.items.some(x=>x.item===n&&normD(x.dest)===priceDest))n='بند جديد '+(++c);db.items.push({item:n,price:0,pack:0,crate:0,both:0,dest:priceDest});save();refreshPrices()}
+function delP(i){db.items.splice(i,1);save();refreshPrices()}
+function pickDest(d){priceDest=normD(d);refreshPrices()}
+function changeDest(){priceDest='';refreshPrices()}
+function addDest(){
+  const e=$('#newDest'),d=e?normD(e.value):'';if(!d){toast('اكتب اسم الوجهة');return}
+  if(!destsAll().includes(d)){db.seq.dests=destsAll().concat([d]);save();toast('تمت إضافة الوجهة')}
+  priceDest=d;refreshPrices()}
+function delDest(){
+  const n=itemsOfDest(priceDest).length;
+  if(!confirm('حذف وجهة «'+priceDest+'»'+(n?' وحذف '+n+' بند من أسعارها':'')+'؟ البوالص القديمة مش هتتأثر.'))return;
+  db.items=db.items.filter(x=>normD(x.dest)!==priceDest);
+  db.seq.dests=destsAll().filter(d=>d!==priceDest);
+  save();priceDest='';refreshPrices();toast('تم حذف الوجهة')}
+function copyFromDest(){
+  const others=destsAll().filter(d=>d!==priceDest&&itemsOfDest(d).length);
+  if(!others.length){toast('مفيش وجهات تانية فيها أسعار تتنسخ');return}
+  openModal('نسخ أسعار من وجهة أخرى',`<p style="font-size:13px;margin:0 0 10px">هيتم نسخ البنود وأسعارها إلى <b>${esc(priceDest)}</b> (البنود الموجودة عندها بالفعل مش هتتغير)، وبعدها تعدّل الأسعار زي ما تحب.</p>
+    <select id="cpSrc" style="width:100%;padding:10px;border:1px solid #dce5f0;border-radius:8px;font:inherit">${others.map(d=>`<option value="${esc(d)}">${esc(d)} (${itemsOfDest(d).length} بند)</option>`).join('')}</select>`,
+  ()=>{const src=$('#cpSrc').value;let c=0;
+    itemsOfDest(src).forEach(x=>{if(!db.items.some(y=>y.item===x.item&&normD(y.dest)===priceDest)){db.items.push({item:x.item,price:x.price,pack:x.pack,crate:x.crate,both:x.both,dest:priceDest});c++}});
+    save();refreshPrices();toast('تم نسخ '+c+' بند')},'نسخ')}
+function moveLegacy(){
+  const n=db.items.filter(x=>!normD(x.dest)).length;
+  openModal('نقل البنود القديمة لوجهة',`<p style="font-size:13px;margin:0 0 10px">اختار أو اكتب الوجهة اللي الـ ${n} بند القدام دول تابعين لها:</p>
+    <input id="mvDest" list="mvDL" placeholder="اسم الوجهة" style="width:100%;padding:10px;border:1px solid #dce5f0;border-radius:8px;font:inherit">${dl('mvDL',destsAll())}`,
+  ()=>{const d=normD($('#mvDest').value);if(!d){toast('اكتب اسم الوجهة');return false}
+    db.items.forEach(x=>{if(!normD(x.dest))x.dest=d});
+    if(!destsAll().includes(d))db.seq.dests=destsAll().concat([d]);
+    save();priceDest=d;refreshPrices();toast('تم النقل')},'نقل')}
 
 /* ---------- bill ---------- */
 function newBill(){go('bill')}
@@ -553,6 +605,27 @@ function billKey(e){
   const next=billRowIds[pos+1];
   if(next===undefined)addBillRow();
   else{const el=$('#itS'+next);if(el)el.focus()}
+}
+function onDestChange(){
+  const d=billDest(),n=itemsOfDest(d).length;
+  const h=$('#destHint');if(h)h.textContent=!d?'اختار الوجهة الأول':(n?'تم تحميل أسعار '+d+' ('+n+' بند)':'مفيش قائمة أسعار للوجهة دي، اكتب البنود يدوي أو ضيفها من «قائمة الأسعار»');
+  const opts=itemsList().map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');let cleared=0;
+  billRowIds.forEach(i=>{
+    const sel=$('#itS'+i),inp=$('#it'+i);if(!sel||!inp)return;
+    const prevSel=sel.value,cur=inp.value.trim(),prevSt=$('#st'+i).value.trim();
+    sel.innerHTML='<option value="">— اختر بند —</option>'+opts+'<option value="__m">✎ كتابة يدوية</option>';
+    if(prevSel==='__m'){sel.value='__m';return}
+    if(!cur){sel.value='';return}
+    if(findItem(cur,d)){
+      sel.value=cur;onItem(i);
+      const so=$('#stS'+i);if(prevSt&&[...so.options].some(o=>o.value===prevSt)){so.value=prevSt;pickStatus(i,prevSt)}
+    }else{
+      sel.value='';inp.value='';inp.style.display='none';
+      $('#pr'+i).value='';$('#sc'+i).value='';$('#st'+i).value='';$('#stS'+i).style.display='none';$('#st'+i).style.display='';cleared++;
+    }
+  });
+  if(cleared)toast('تم مسح '+cleared+' بند مش موجودين في أسعار '+d);
+  recalcAll();
 }
 function pickItem(i,v){
   const inp=$('#it'+i);
@@ -601,6 +674,7 @@ function saveBill(){
   if(!lines.length){toast('أضف بند واحد على الأقل');return}
   if(lines.some(l=>!(l.qty>0)||l.qty!==Math.floor(l.qty))){toast('العدد لازم يكون رقم صحيح أكبر من صفر في كل بند');return}
   if(lines.some(l=>l.price<0||l.stateCost<0)){toast('الأسعار لا يمكن أن تكون بالسالب');return}
+  if(!billDest()){toast('حدد الوجهة الأول');const bc=$('#bCity');if(bc)bc.focus();return}
   const bn=$('#bNo').value.trim();
   if(!bn){toast('اكتب رقم الشحنة');return}
   if(db.customers.some(c=>c.shipments.some(x=>String(x.no)===bn))){toast('رقم الشحنة مستخدم قبل كده، غيّره');return}
@@ -610,6 +684,7 @@ function saveBill(){
   const gross=lines.reduce((s,l)=>s+l.qty*(l.price+l.stateCost),0);
   const discount=0,total=gross;
   const sh={no:$('#bNo').value.trim(),date:$('#bDate').value,city:$('#bCity').value.trim(),sender:$('#bSender').value.trim(),senderPh:$('#bSenderPh').value.trim(),recv:$('#bRecv').value.trim(),recvPh:$('#bRecvPh').value.trim(),staff:$('#bStaff').value.trim(),lines,gross,discount,total};
+  if(!destsAll().includes(sh.city))db.seq.dests=destsAll().concat([sh.city]);
   c.shipments.push(sh);db.seq.bill++;save();toast('تم حفظ البوليصة');
   curCust=curCust;go('customer');viewBill(c.shipments.length-1);
 }
@@ -759,7 +834,7 @@ function printArea(html){$('#printArea').innerHTML=html;window.print()}
 
 /* ---------- init ---------- */
 document.querySelectorAll('.brandmark img').forEach(i=>i.src=LOGO);
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='prices')priceDest='';go(b.dataset.page)}));
 $('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
 $('#closeModal').onclick=closeModal;
 $('#saveModal').onclick=()=>{if(modalSave){const r=modalSave();if(r!==false)closeModal()}};
@@ -935,6 +1010,7 @@ function fromRows(X){
   const st=(X.settings||[])[0]||{};
   d.settings={notice:st.notice||DEFAULT_NOTICE,note:st.note||DEFAULT_NOTE,addr:st.addr||DEFAULT_ADDR,inq1:st.inq1||'',inq2:st.inq2||''};
   d.seq=Object.assign({cust:1,bill:1,wh:3,trip:1},st.seq||{});
+  if(!Array.isArray(d.seq.dests))d.seq.dests=CITIES.slice();
   (X.items||[]).forEach(r=>d.items.push(unpack(r,SP.items)));
   (X.warehouses||[]).forEach(r=>{const o=unpack(r,SP.wh);delete o._id;o.id=Number(r.id);d.warehouses.push(o)});
   const tm=new Map;
