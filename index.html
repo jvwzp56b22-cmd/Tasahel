@@ -87,7 +87,7 @@ const DEFAULT_ADDR='شارع العشرين الجديد - حسن محمد في�
 const DEFAULT={customers:[],prices:[
   {item:'ثلاجة',price:10000,status:'تخشيب',stateCost:1000},
   {item:'بوتجاز',price:7000,status:'تخشيب + تغليف',stateCost:1500}],
-  seq:{cust:1,bill:1},settings:{notice:DEFAULT_NOTICE,note:DEFAULT_NOTE,addr:DEFAULT_ADDR}};
+  seq:{cust:1,bill:1},settings:{notice:DEFAULT_NOTICE,note:DEFAULT_NOTE,addr:DEFAULT_ADDR,inq1:'',inq2:''}};
 let db;
 
 if(!db||!db.customers) db=JSON.parse(JSON.stringify(DEFAULT));
@@ -99,6 +99,36 @@ if(!db.items){db.items=[];(db.prices||[]).forEach(p=>{let x=db.items.find(y=>y.i
   }
 if(!db.sdInit){db.warehouses.push({id:db.seq.wh++,name:'مخزن السودان 1',country:'SD'},{id:db.seq.wh++,name:'مخزن السودان 2',country:'SD'});db.sdInit=true;}
 function save(){window.cloudSave&&window.cloudSave()}
+
+/* ---------- WhatsApp notifications ---------- */
+const WA_CO='تساهيل للشحن الدولي';
+const WA_TRIP={shipped:'تم الشحن',arrived:'وصل العفش السودان',delivered:'تم التسليم'};
+function waPhone(p){let d=String(p||'').replace(/[^\d]/g,'');if(d.startsWith('00'))d=d.slice(2);else if(d.startsWith('0'))d='20'+d.slice(1);return d}
+function waText(c,nos,status,items){
+  const inq=[db.settings.inq1,db.settings.inq2].map(x=>String(x||'').trim()).filter(Boolean);
+  return 'مرحباً '+c.name+'،\nتم تحديث حالة شحنتك رقم '+nos.join('، ')+' لدى '+WA_CO+'.'
+    +(items&&items.length?'\n\nالعفش: '+items.join('، '):'')
+    +'\n\nالحالة الحالية: '+status
+    +(inq.length?'\n\nللاستفسار: '+inq.join(' - '):'')}
+function waOpen(c,nos,status,items){
+  const ph=waPhone(c.phone);if(!ph){toast('مفيش رقم تليفون للعميل '+c.name);return}
+  window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(waText(c,nos,status,items)),'_blank')}
+let waQ=[];
+function waGroup(list){const m=new Map();
+  list.forEach(x=>{let g=m.get(x.c);if(!g){g={c:x.c,nos:[],items:[]};m.set(x.c,g)}
+    const no=docNoOf(x.s);if(!g.nos.includes(no))g.nos.push(no);if(x.p&&x.p.item)g.items.push(x.p.item)});
+  return [...m.values()]}
+function waPrompt(list,status){
+  const g=waGroup(list);if(!g.length)return;
+  if(g.length===1){const x=g[0];
+    openModal('إرسال واتساب للعميل',`<p style="font-size:14px;line-height:1.9">تبعت رسالة واتساب لـ <b>${esc(x.c.name)}</b> بالحالة الجديدة: <b>${esc(status)}</b>؟</p><div class="notice" style="white-space:pre-line;margin-top:10px">${esc(waText(x.c,x.nos,status,x.items))}</div>`,
+      ()=>{waOpen(x.c,x.nos,status,x.items)},'إرسال واتساب');return}
+  waQ=g.map(x=>Object.assign({status},x));
+  openModal('إرسال واتساب للعملاء — '+status,`<p style="font-size:13px;color:#73849B;margin:0 0 10px">دوس على «إرسال» لكل عميل، وهيفتح الواتساب برسالة جاهزة.</p><div class="tablewrap"><table><tbody>${waQ.map((x,i)=>`<tr><td>${esc(x.c.name)}</td><td dir="ltr" style="text-align:right">${esc(x.c.phone||'')}</td><td>${btn('إرسال',`waSendQ(${i})`,'soft')}</td></tr>`).join('')}</tbody></table></div>`,null)}
+function waSendQ(i){const x=waQ[i];if(x)waOpen(x.c,x.nos,x.status,x.items)}
+function waPiece(ci,si,pi){const c=db.customers[ci],s=c.shipments[si],p=s.pieces[pi];waPrompt([{c,s,p}],stageName(stageOf(p)))}
+function waShip(ci,si){const c=db.customers[ci],s=c.shipments[si];ensurePieces(s);waOpen(c,[docNoOf(s)],'تم التسليم',s.pieces.map(p=>p.item))}
+function saveInq(){db.settings.inq1=$('#sInq1').value.trim();db.settings.inq2=$('#sInq2').value.trim();save();toast('تم حفظ أرقام الاستفسار')}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2300)}
 
 const names={home:'الرئيسية',customers:'العملاء',prices:'قائمة الأسعار',customer:'ملف العميل',bill:'بوليصة شحن',warehouses:'المخازن',warehouse:'المخزن',trip:'الرحلة',trips:'الرحلات',customs:'الرسوم والمصاريف',delivery:'استلام السودان',reports:'التقارير',staff:'الموظفون والصلاحيات'};
@@ -142,7 +172,7 @@ function go(p){
 const pages={
 delivery:()=>{
   const rows=[];
-  db.customers.forEach((c,ci)=>c.shipments.forEach((x,si)=>rows.push(`<tr><td>${esc(x.no)}</td><td>${esc(c.name)}</td><td>${esc(x.recv)}</td><td>${esc(x.city)}</td><td>${esc(x.date)}</td><td>${x.delivered?pill('تم التسليم','green')+(x.delDate?`<div style="font-size:11px;color:#73849B;margin-top:4px">${esc(x.delDate)}</div>`:''):pill('لم يُسلَّم','orange')}</td><td style="white-space:nowrap">${x.delivered?btn('عرض السند',`showDelivery(${ci},${si})`,'soft')+' '+btn('طباعة',`printDelivery(${ci},${si})`,'soft')+' '+btn('تراجع',`undoDelivered(${ci},${si})`,''):btn('تم التسليم',`markDelivered(${ci},${si})`)+' '+btn('سند تسليم',`openDelivery(${ci},${si})`,'soft')}</td></tr>`)));
+  db.customers.forEach((c,ci)=>c.shipments.forEach((x,si)=>rows.push(`<tr><td>${esc(x.no)}</td><td>${esc(c.name)}</td><td>${esc(x.recv)}</td><td>${esc(x.city)}</td><td>${esc(x.date)}</td><td>${x.delivered?pill('تم التسليم','green')+(x.delDate?`<div style="font-size:11px;color:#73849B;margin-top:4px">${esc(x.delDate)}</div>`:''):pill('لم يُسلَّم','orange')}</td><td style="white-space:nowrap">${x.delivered?btn('عرض السند',`showDelivery(${ci},${si})`,'soft')+' '+btn('طباعة',`printDelivery(${ci},${si})`,'soft')+' '+btn('تراجع',`undoDelivered(${ci},${si})`,'')+' '+btn('واتساب',`waShip(${ci},${si})`,'soft'):btn('تم التسليم',`markDelivered(${ci},${si})`)+' '+btn('سند تسليم',`openDelivery(${ci},${si})`,'soft')}</td></tr>`)));
   return pageHead('استلام السودان','اطبع سند التسليم لأي شحنة وسلّمه للمستلم هناك ليوقّع',``)+
   `<div class="panel"><div class="tablewrap"><table><thead><tr><th>رقم الشحنة</th><th>المرسل</th><th>المستلم</th><th>الوجهة</th><th>التاريخ</th><th>الحالة</th><th></th></tr></thead><tbody>${rows.join('')||'<tr><td colspan="7" style="text-align:center;color:#73849B;padding:26px">لا توجد شحنات بعد، أنشئ بوليصة من ملف العميل</td></tr>'}</tbody></table></div></div>`;
 },
@@ -164,7 +194,7 @@ warehouse:()=>{
   const waiting={};all.filter(x=>x.p.wh==null).forEach(x=>{(waiting[x.ci]=waiting[x.ci]||[]).push(x)});
   const opts=db.warehouses.filter(o=>o.id!==w.id&&o.country!=='SD').map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
   const inRows=inside.map(x=>`<tr><td><input type="checkbox" class="stchk" value="${x.ci}_${x.si}_${x.pi}" style="width:auto"></td><td>${esc(x.c.name)}</td><td>${pieceCode(x.s,x.pi)}</td><td>${esc(x.p.item)}</td><td>${esc(x.p.status)||'—'}</td>
-    <td style="white-space:nowrap">${stagePill(x.p)} <select onchange="setStage(${x.ci},${x.si},${x.pi},this.value)" style="padding:6px;border:1px solid #dce5f0;border-radius:8px;margin-inline-start:4px">${STAGES.map(s=>`<option value="${s[0]}"${stageOf(x.p)===s[0]?' selected':''}>${s[1]}</option>`).join('')}</select> ${stageOf(x.p)!=='shipped'?btn('التالي ◂',`nextStage(${x.ci},${x.si},${x.pi})`,'soft'):''}</td>
+    <td style="white-space:nowrap">${stagePill(x.p)} <select onchange="setStage(${x.ci},${x.si},${x.pi},this.value)" style="padding:6px;border:1px solid #dce5f0;border-radius:8px;margin-inline-start:4px">${STAGES.map(s=>`<option value="${s[0]}"${stageOf(x.p)===s[0]?' selected':''}>${s[1]}</option>`).join('')}</select> ${stageOf(x.p)!=='shipped'?btn('التالي ◂',`nextStage(${x.ci},${x.si},${x.pi})`,'soft'):''} ${btn('واتساب',`waPiece(${x.ci},${x.si},${x.pi})`,'soft')}</td>
     <td><select onchange="movePiece(${x.ci},${x.si},${x.pi},this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">نقل إلى...</option>${opts}</select> ${btn('إخراج',`unstore(${x.ci},${x.si},${x.pi})`,'')}</td></tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:#73849B;padding:22px">'+(stFilter?'لا توجد قطع بهذه الحالة':'المخزن فاضي')+'</td></tr>';
   const wKeys=Object.keys(waiting);
   const wRows=wKeys.map(ci=>{const arr=waiting[ci],c=db.customers[ci];
@@ -306,12 +336,12 @@ const stageOf=p=>p.stage||(p.trip?'shipped':'received');
 const stageName=k=>(STAGES.find(s=>s[0]===k)||STAGES[0])[1];
 function stagePill(p){const k=stageOf(p),s=STAGES.find(x=>x[0]===k)||STAGES[0];return pill(s[1],s[2])}
 function setStageQuiet(p,k){if(stageOf(p)===k&&p.stage)return;p.stage=k;(p.stageLog=p.stageLog||[]).push({s:k,d:today()})}
-function setStage(ci,si,pi,k){setStageQuiet(db.customers[ci].shipments[si].pieces[pi],k);save();toast('تم التحديث: '+stageName(k));go('warehouse')}
+function setStage(ci,si,pi,k){setStageQuiet(db.customers[ci].shipments[si].pieces[pi],k);save();toast('تم التحديث: '+stageName(k));go('warehouse');{const s=db.customers[ci].shipments[si];waPrompt([{c:db.customers[ci],s,p:s.pieces[pi]}],stageName(k))}}
 function nextStage(ci,si,pi){const p=db.customers[ci].shipments[si].pieces[pi],i=STAGES.findIndex(s=>s[0]===stageOf(p));if(i>=STAGES.length-1){toast('القطعة وصلت لآخر حالة');return}setStage(ci,si,pi,STAGES[i+1][0])}
 function bulkStage(){const k=$('#bulkSt').value;if(!k){toast('اختار الحالة الأول');return}
   const sel=[...document.querySelectorAll('.stchk:checked')];if(!sel.length){toast('حدد قطعة واحدة على الأقل');return}
-  sel.forEach(c=>{const [a,b,d]=c.value.split('_').map(Number);setStageQuiet(db.customers[a].shipments[b].pieces[d],k)});
-  save();toast('تم تحديث '+sel.length+' قطعة: '+stageName(k));go('warehouse')}
+  const wl=[];sel.forEach(c=>{const [a,b,d]=c.value.split('_').map(Number);const s=db.customers[a].shipments[b];setStageQuiet(s.pieces[d],k);wl.push({c:db.customers[a],s,p:s.pieces[d]})});
+  save();toast('تم تحديث '+sel.length+' قطعة: '+stageName(k));go('warehouse');waPrompt(wl,stageName(k))}
 function setStFilter(k){stFilter=k;go('warehouse')}
 function locPanel(c){
   const rows=[];c.shipments.forEach(s=>{ensurePieces(s);s.pieces.forEach((p,i)=>rows.push(`<tr><td>${pieceCode(s,i)}</td><td>${esc(p.item)}</td><td>${p.handed?pill('تم الاستلام','green'):p.sdWh!=null?pill('مخزن السودان: '+esc(whName(p.sdWh)),'green'):(p.trip&&tripDone(db.trips.find(t=>t.id===p.trip)))?pill('وصل السودان - بانتظار التخزين','orange'):p.trip?pill('في الرحلة '+esc((db.trips.find(t=>t.id===p.trip)||{}).no||''),'green'):(p.wh==null?pill('لم يُخزَّن','orange'):pill(esc(whName(p.wh)),'green'))}</td><td>${(p.handed||p.sdWh!=null)?'—':stagePill(p)}</td></tr>`))});
@@ -424,7 +454,7 @@ function newTrip(){openModal('رحلة جديدة',tripForm(),()=>{
   db.seq.trip++;save();curTrip=db.trips.length-1;go('trip');return true})}
 function editTrip(){const t=db.trips[curTrip];openModal('تعديل الرحلة',tripForm(t),()=>{
   t.no=$('#tNo').value.trim()||t.no;t.date=$('#tDate').value;t.dest=$('#tDest').value.trim();t.car=$('#tCar').value.trim();t.driver=$('#tDriver').value.trim();t.driverPh=$('#tDriverPh').value.trim();save();go('trip');return true})}
-function setTripStatus(v){const t=db.trips[curTrip];t.status=v;if(v==='delivered'&&!t.deliveredAt)t.deliveredAt=today();save();toast(v==='delivered'?'تم التسليم — نزلت أسماء عملاء الرحلة في مخازن السودان':'تم تغيير حالة الرحلة');go('trip')}
+function setTripStatus(v){const t=db.trips[curTrip];t.status=v;if(v==='delivered'&&!t.deliveredAt)t.deliveredAt=today();save();toast(v==='delivered'?'تم التسليم — نزلت أسماء عملاء الرحلة في مخازن السودان':'تم تغيير حالة الرحلة');go('trip');if(WA_TRIP[v])waPrompt(tripPieces(t),WA_TRIP[v])}
 function rmFromTrip(ci,si,pi){db.customers[ci].shipments[si].pieces[pi].trip=null;setStageQuiet(db.customers[ci].shipments[si].pieces[pi],'ready');save();go('trip')}
 function pickForTrip(){
   openModal('إضافة عفش للرحلة',`<div style="margin-bottom:12px"><label style="font-size:11px;color:#62758d">المخزن</label><select id="pkWh" onchange="renderPick()" style="width:100%;padding:9px;border:1px solid #dce5f0;border-radius:9px"><option value="">كل المخازن</option>${db.warehouses.filter(w=>w.country!=='SD').map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div><div id="pkList"></div>`,()=>{
@@ -738,7 +768,7 @@ pages.staff=()=>{
   <td>${btn('تعديل',`staffForm(${u.id})`,'soft')} ${u.id===ME.id?'':btn(u.active===false?'تفعيل':'إيقاف',`staffToggle(${u.id})`,'')+' '+btn('حذف',`staffDel(${u.id})`,'')}</td></tr>`).join('');
   return pageHead('الموظفون والصلاحيات','أضف موظفين وحدد لكل واحد الصفحات اللي يشوفها ويعدّل فيها',btn('＋ إضافة موظف','staffForm()')+btn('⬇ نسخة احتياطية','backupDb()','soft')+btn('⬆ استرجاع نسخة','restoreDb()','soft'))+
   `<div class="notice" style="margin-bottom:14px">البيانات محفوظة على السيرفر ويشوفها كل الموظفين حسب صلاحياتهم. خد نسخة احتياطية بانتظام. آخر نسخة: <b>${esc(db.lastBackup||'لم تُؤخذ بعد')}</b></div>`+
-  `<div class="panel"><div class="tablewrap"><table><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الدور</th><th>الحالة</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  `<div class="panel" style="margin-bottom:14px"><div class="panelhead"><h3>أرقام الاستفسار (واتساب)</h3><small>تظهر في آخر كل رسالة تتبعت للعميل</small></div><div class="formgrid">${field('رقم الاستفسار 1',`<input id="sInq1" dir="ltr" placeholder="+201XXXXXXXXX" value="${esc(db.settings.inq1)}">`)}${field('رقم الاستفسار 2',`<input id="sInq2" dir="ltr" placeholder="+201XXXXXXXXX" value="${esc(db.settings.inq2)}">`)}</div>${btn('حفظ الأرقام','saveInq()')}</div><div class="panel"><div class="tablewrap"><table><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الدور</th><th>الحالة</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 };
 function staffForm(id){
   const u=id?db.users.find(x=>x.id===id):{perms:{}};
@@ -831,7 +861,7 @@ function toRows(d){
         R.pieces.set(String(pr.id),pr)})})});
   d.trips.forEach(t=>Object.entries(t.shares||{}).forEach(([code,amt])=>{const cid=byCode[code];
     if(cid!==undefined)R.trip_shares.set(t.id+'_'+cid,{trip_id:+t.id,customer_id:cid,amount:Math.max(+amt||0,0)})}));
-  R.settings.set('1',{id:1,notice:d.settings.notice||'',note:d.settings.note||'',addr:d.settings.addr||'',seq:d.seq});
+  R.settings.set('1',{id:1,notice:d.settings.notice||'',note:d.settings.note||'',addr:d.settings.addr||'',inq1:d.settings.inq1||'',inq2:d.settings.inq2||'',seq:d.seq});
   return R}
 const snapOf=R=>{const s={};TBL.forEach(t=>{const m=new Map();R[t].forEach((r,k)=>m.set(k,stable(r)));s[t]=m});return s};
 const sameSnap=(a,b)=>TBL.every(t=>a[t].size===b[t].size&&[...a[t]].every(([k,v])=>b[t].get(k)===v));
@@ -839,7 +869,7 @@ const sameSnap=(a,b)=>TBL.every(t=>a[t].size===b[t].size&&[...a[t]].every(([k,v]
 function fromRows(X){
   const d={customers:[],items:[],warehouses:[],trips:[],users:[],sdInit:true};
   const st=(X.settings||[])[0]||{};
-  d.settings={notice:st.notice||DEFAULT_NOTICE,note:st.note||DEFAULT_NOTE,addr:st.addr||DEFAULT_ADDR};
+  d.settings={notice:st.notice||DEFAULT_NOTICE,note:st.note||DEFAULT_NOTE,addr:st.addr||DEFAULT_ADDR,inq1:st.inq1||'',inq2:st.inq2||''};
   d.seq=Object.assign({cust:1,bill:1,wh:3,trip:1},st.seq||{});
   (X.items||[]).forEach(r=>d.items.push(unpack(r,SP.items)));
   (X.warehouses||[]).forEach(r=>{const o=unpack(r,SP.wh);delete o._id;o.id=Number(r.id);d.warehouses.push(o)});
