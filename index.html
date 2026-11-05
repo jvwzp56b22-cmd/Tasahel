@@ -209,7 +209,7 @@ warehouse:()=>{
   const waiting={};all.filter(x=>x.p.wh==null).forEach(x=>{(waiting[x.ci]=waiting[x.ci]||[]).push(x)});
   const opts=db.warehouses.filter(o=>o.id!==w.id&&o.country!=='SD').map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
   const inRows=grpBy(inside).map(arr=>{const x=arr[0],k=pKeys(arr),st=grpStageOf(arr);
-    return `<tr><td><input type="checkbox" class="stchk" value="${k}" style="width:auto"></td><td>${custLink(x.c,k)}</td><td>${docNoOf(x.s)}</td><td>${esc(x.s.city||'—')}</td><td style="white-space:normal;min-width:140px">${esc(itemsSum(arr.map(y=>y.p.item)).join('، '))}</td><td><b>${arr.length}</b></td>
+    return `<tr><td><input type="checkbox" class="stchk" value="${k}" style="width:auto"></td><td>${custLink(x.c,k)}</td><td>${docNoOf(x.s)}</td><td>${esc(x.s.city||'—')}</td><td style="white-space:normal;min-width:140px">${esc(itemsSum(arr.map(y=>y.p.item)).join('، '))}${leftPill(arr)}</td><td><b>${arr.length}</b></td>
     <td style="white-space:nowrap">${grpStagePill(arr)} <select onchange="grpStage('${k}',this.value)" style="padding:6px;border:1px solid #dce5f0;border-radius:8px;margin-inline-start:4px">${st?'':'<option value="" selected>تحديث الكل...</option>'}${STAGES.map(s=>`<option value="${s[0]}"${st===s[0]?' selected':''}>${s[1]}</option>`).join('')}</select> ${st!=='shipped'?btn('التالي ◂',`grpNext('${k}')`,'soft'):''} ${btn('واتساب',`grpWa('${k}')`,'soft')}</td>
     <td style="white-space:nowrap"><select onchange="grpMove('${k}',this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">نقل الكل إلى...</option>${opts}</select> ${btn('إخراج الكل',`grpUnstore('${k}')`,'')}</td></tr>`}).join('')||'<tr><td colspan="8" style="text-align:center;color:#73849B;padding:22px">'+(stFilter?'لا توجد قطع بهذه الحالة':'المخزن فاضي')+'</td></tr>';
   const wKeys=Object.keys(waiting);
@@ -232,15 +232,15 @@ trip:()=>{
   const t=db.trips[curTrip];if(!t)return pages.trips();
   t.expenses=t.expenses||[];t.shares=t.shares||{};
   const ps=tripPieces(t).sort((a,b)=>a.ci-b.ci);
-  const rows=ps.map(x=>{const rest=custTotal(x.c)-custPaid(x.c);
-    return `<tr><td>${esc(x.c.name)}</td><td>${pieceCode(x.s,x.pi)}</td><td>${esc(x.p.item)}</td><td>${esc(whName(x.p.wh))}</td><td>${rest>0?pill('عليه متبقي '+num(rest),'orange'):pill('خالص','green')}</td><td>${t.status==='open'?btn('إزالة',`rmFromTrip(${x.ci},${x.si},${x.pi})`,''):''}</td></tr>`}).join('')||emptyRow(6,'لا يوجد عفش في الرحلة، اضغط "إضافة عفش للرحلة"');
+  const rows=grpBy(ps).map(arr=>{const x=arr[0],k=pKeys(arr),rest=custTotal(x.c)-custPaid(x.c),whs=[...new Set(arr.map(y=>whName(y.p.wh)))];
+    return `<tr><td><a href="javascript:void(0)" onclick="leftModal('${k}')" style="color:#1d67bd;font-weight:bold;text-decoration:none;border-bottom:1px dashed #1d67bd">${esc(x.c.name)}</a></td><td>${docNoOf(x.s)}</td><td>${esc(x.s.city||'—')}</td><td style="white-space:normal;min-width:140px">${esc(itemsSum(arr.map(y=>y.p.item)).join('، '))}</td><td><b>${arr.length}</b></td><td>${esc(whs.join('، '))}</td><td>${rest>0?pill('عليه متبقي '+num(rest),'orange'):pill('خالص','green')}</td><td style="white-space:nowrap">${btn('عفش متخلف',`leftModal('${k}')`,'soft')} ${t.status==='open'?btn('إزالة',`rmGroupFromTrip('${k}')`,''):''}</td></tr>`}).join('')||emptyRow(8,'لا يوجد عفش في الرحلة، اضغط "إضافة عفش للرحلة"');
   const exp=t.expenses.map((e,i)=>`<tr><td>${e.kind==='customs'?pill('إضافية / جمركية','orange'):pill('عامة','')}</td><td>${esc(e.name)}</td><td>${num(e.amount)}</td><td>${esc(e.date)}</td><td>${btn('حذف',`delExp(${i})`,'')}</td></tr>`).join('')||emptyRow(5,'لا توجد مصاريف مسجلة');
   const custs=tripCustomers(t);
   const shareRows=custs.map(c=>{const n=ps.filter(x=>x.c===c).length,fee=ps.filter(x=>x.c===c).reduce((a,x)=>a+(+x.p.cost||0),0);
     return `<tr><td>${esc(c.name)}</td><td>${n}</td><td>${num(fee)}</td><td><input type="number" min="0" value="${t.shares[c.code]||''}" placeholder="0" onchange="setShare(${db.customers.indexOf(c)},this.value)" style="max-width:140px"></td></tr>`}).join('')||emptyRow(4,'أضف عفش للرحلة الأول');
   return pageHead(esc(t.no),`${esc(t.dest)} · ${esc(t.date)}${t.car?' · سيارة '+esc(t.car):''}${t.driver?' · السائق: '+esc(t.driver):''}${t.driverPh?' · '+esc(t.driverPh):''}`,
-    btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft'))+
-  `<div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>العفش في الرحلة (${ps.length} قطعة)</h3>${btn('＋ إضافة عفش للرحلة','pickForTrip()')}</div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>رقم القطعة</th><th>القطعة</th><th>المخزن</th><th>الدفع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft')+btn('🖨 منفستو الرحلة','printManifest()','soft')+btn('عفش متخلف','leftModal(\'\')','soft'))+
+  `<div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>العفش في الرحلة (${ps.length} قطعة)</h3>${btn('＋ إضافة عفش للرحلة','pickForTrip()')}</div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>البوليصة</th><th>الوجهة</th><th>القطع</th><th>العدد</th><th>المخزن</th><th>الدفع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>مصاريف الرحلة</h3>${btn('＋ إضافة مصروف','addExp()')}</div><div class="notice" style="margin-bottom:12px">المصاريف العامة (وقود، تحميل...) على الشركة. المصاريف الإضافية / الجمركية هي اللي بتتقسم على العملاء بعد التسليم.</div><div class="tablewrap"><table><thead><tr><th>النوع</th><th>البند</th><th>المبلغ</th><th>التاريخ</th><th></th></tr></thead><tbody>${exp}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>تقسيم الرسوم الإضافية على العملاء</h3><span>${btn('بالتساوي على العملاء','splitExtra(\'eq\')','soft')} ${btn('حسب عدد القطع','splitExtra(\'pc\')','soft')}</span></div>
   <div id="shareSum"></div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>عدد القطع</th><th>رسوم الشحن (للمعلومية)</th><th>نصيبه من الرسوم الإضافية</th></tr></thead><tbody>${shareRows}</tbody></table></div></div>
@@ -444,7 +444,7 @@ function pOut(ci,si,pi,k){const p=db.customers[ci].shipments[si].pieces[pi];if(c
 function pHand(ci,si,pi,k){if(!confirm('تأكيد إن العميل استلم هذه القطعة؟'))return;const p=db.customers[ci].shipments[si].pieces[pi];p.handed=true;p.handedDate=today();save();toast('تم تسجيل الاستلام');go('warehouse');openGroup(k)}
 
 /* ---------- Sudan warehouses ---------- */
-const tripDone=t=>!!(t&&t.deliveredAt&&(t.status==='delivered'||t.status==='closed'));
+const tripDone=t=>!!(t&&(t.status==='arrived'||t.status==='delivered'||t.status==='closed'));
 function whTabs(){return `<div style="display:flex;gap:8px;margin-bottom:16px">${[['EG','مخازن مصر'],['SD','مخازن السودان']].map(t=>`<button class="btn ${whTab===t[0]?'primary':'soft'}" onclick="setWhTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`}
 function setWhTab(t){whTab=t;go('warehouses')}
 function sdWaiting(){return allPieces().filter(x=>x.p.trip&&!x.p.handed&&x.p.sdWh==null&&tripDone(db.trips.find(t=>t.id===x.p.trip)))}
@@ -467,7 +467,7 @@ function sdWhPage(){
     return `<div class="panel"><h3 style="margin:0 0 6px">${esc(o.w.name)}</h3><p style="color:#73849B;font-size:12px;margin:0 0 14px">${ps.length} قطعة · ${cs} عميل</p>
     ${btn('فتح المخزن',`openWh(${o.i})`)} ${btn('تعديل الاسم',`renameWh(${o.i})`,'soft')} ${btn('حذف',`delWh(${o.i})`,'')}</div>`}).join('')||'<div class="notice">لا توجد مخازن في السودان، أضف مخزن جديد.</div>';
   const rows=Object.keys(g).map(k=>{const arr=g[k],t=db.trips.find(t=>t.id===arr[0].p.trip)||{};
-    return `<tr><td>${esc(arr[0].c.code)}</td><td>${esc(arr[0].c.name)}</td><td>${esc(t.no||'')}</td><td>${arr.map(x=>esc(x.p.item)).join('، ')}</td><td>${arr.length}</td><td><select onchange="sdAssign('${k}',this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">تخزين في...</option>${opts}</select></td></tr>`}).join('')||emptyRow(6,'لا يوجد عفش بانتظار التوزيع. بيظهر هنا أسماء عملاء أي رحلة تغيّر حالتها إلى "تم التسليم"');
+    return `<tr><td>${esc(arr[0].c.code)}</td><td>${esc(arr[0].c.name)}</td><td>${esc(t.no||'')}</td><td>${arr.map(x=>esc(x.p.item)).join('، ')}</td><td>${arr.length}</td><td><select onchange="sdAssign('${k}',this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">تخزين في...</option>${opts}</select></td></tr>`}).join('')||emptyRow(6,'لا يوجد عفش بانتظار التوزيع. بيظهر هنا عفش أي رحلة وصلت السودان ومفيش مخزن بنفس اسم وجهتها');
   return pageHead('المخازن','مخازن السودان · العفش بيتخزن هنا لحد ما العميل يرجع ويستلمه',btn('＋ إضافة مخزن','addWh()'))+whTabs()+
   `<div class="stats" style="grid-template-columns:repeat(3,1fr)">${[['عدد المخازن',sds.length],['قطع مخزّنة',stored],['قطع بانتظار التوزيع',wait]].map(x=>`<div class="stat"><div><small>${x[0]}</small><strong>${x[1]}</strong></div></div>`).join('')}</div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>عملاء وصل عفشهم (بانتظار تحديد المخزن)</h3></div><div class="tablewrap"><table><thead><tr><th>الكود</th><th>العميل</th><th>الرحلة</th><th>القطع</th><th>العدد</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
@@ -522,23 +522,68 @@ function newTrip(){openModal('رحلة جديدة',tripForm(),()=>{
   db.seq.trip++;save();curTrip=db.trips.length-1;go('trip');return true})}
 function editTrip(){const t=db.trips[curTrip];openModal('تعديل الرحلة',tripForm(t),()=>{
   t.no=$('#tNo').value.trim()||t.no;t.date=$('#tDate').value;t.dest=$('#tDest').value.trim();t.car=$('#tCar').value.trim();t.driver=$('#tDriver').value.trim();t.driverPh=$('#tDriverPh').value.trim();save();go('trip');return true})}
-function setTripStatus(v){const t=db.trips[curTrip];t.status=v;if(v==='delivered'&&!t.deliveredAt)t.deliveredAt=today();save();toast(v==='delivered'?'تم التسليم — نزلت أسماء عملاء الرحلة في مخازن السودان':'تم تغيير حالة الرحلة');go('trip');if(WA_TRIP[v])waPrompt(tripPieces(t),WA_TRIP[v])}
+function setTripStatus(v){const t=db.trips[curTrip];t.status=v;if(v==='delivered'&&!t.deliveredAt)t.deliveredAt=today();
+  let msg='تم تغيير حالة الرحلة';
+  if(v==='arrived'||v==='delivered'){const r=autoSdStore(t);
+    msg=r.w?(r.n?'نزل '+r.n+' قطعة تلقائي في '+r.w.name:'العفش متخزن بالفعل في مخازن السودان'):'مفيش مخزن في السودان باسم «'+(t.dest||'—')+'» — العفش نزل في قائمة الانتظار'}
+  save();toast(msg);go('trip');if(WA_TRIP[v])waPrompt(tripPieces(t),WA_TRIP[v])}
+/* مطابقة اسم الوجهة مع اسم المخزن مع تجاهل فروق الكتابة (أم درمان = امدرمان = مخزن امدرمان) */
+function normAr(s){return String(s||'').replace(/[ً-ْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/مخازن|مخزن/g,' ').replace(/(^|\s)ال/g,'$1').replace(/[\s\-_.,،()]/g,'')}
+function findSdWh(dest){const d=normAr(dest);if(!d)return null;const sds=db.warehouses.filter(w=>w.country==='SD');
+  return sds.find(w=>normAr(w.name)===d)||sds.find(w=>{const n=normAr(w.name);return n.length>=3&&d.length>=3&&(n.includes(d)||d.includes(n))})||null}
+function autoSdStore(t){const w=findSdWh(t.dest),ps=tripPieces(t).filter(x=>!x.p.handed&&x.p.sdWh==null);
+  if(w)ps.forEach(x=>x.p.sdWh=w.id);return {w,n:w?ps.length:0}}
+function rmGroupFromTrip(k){const t=db.trips[curTrip];fromKeys(k).filter(x=>x.p.trip===t.id).forEach(x=>{x.p.trip=null;setStageQuiet(x.p,'ready')});save();go('trip')}
+/* ---------- العفش المتخلف (اللي العربية مشالتهوش) ---------- */
+function leftModal(k){
+  const t=db.trips[curTrip];if(!t)return;
+  const ps=(k?fromKeys(k):tripPieces(t)).filter(x=>x.p.trip===t.id).sort((a,b)=>a.ci-b.ci);
+  if(!ps.length){toast('لا يوجد عفش في الرحلة');return}
+  const body=grpBy(ps).map(arr=>{const x=arr[0];
+    return `<div style="border:1px solid #edf1f6;border-radius:10px;padding:10px;margin-bottom:10px"><label style="display:flex;gap:10px;align-items:center;font-weight:bold;font-size:13px;flex-wrap:wrap"><input type="checkbox" style="width:auto" onchange="this.closest('div').querySelectorAll('.lfchk').forEach(c=>c.checked=this.checked)"> ${esc(x.c.name)} <span style="color:#73849B;font-weight:normal;font-size:11px">${docNoOf(x.s)} · ${esc(x.s.city||'')} · ${arr.length} قطعة</span></label>
+    ${arr.map(y=>`<label style="display:flex;gap:10px;align-items:center;padding:6px 22px;font-size:12px"><input type="checkbox" class="lfchk" value="${y.ci}_${y.si}_${y.pi}" style="width:auto"> ${esc(y.p.item)} <span style="color:#73849B;font-size:11px">${pieceCode(y.s,y.pi)}${y.p.status?' · '+esc(y.p.status):''} · ${esc(whName(y.p.wh))}${y.p.sdWh!=null?' · '+esc(whName(y.p.sdWh)):''}</span></label>`).join('')}</div>`}).join('');
+  openModal(k?'عفش '+ps[0].c.name+' في الرحلة '+t.no:'العفش المتخلف — رحلة '+t.no,
+    `<div class="notice">علّم على القطع اللي <b>العربية مشالتهاش</b>. هتخرج من الرحلة وترجع لمخزنها في مصر بحالة «جاهز للشحن»، ويتكتب جنبها «متخلف من رحلة ${esc(t.no)}».</div>${body}`,()=>{
+    const sel=[...document.querySelectorAll('.lfchk:checked')];if(!sel.length){toast('علّم على قطعة واحدة على الأقل');return false}
+    fromKeys(sel.map(c=>c.value).join(',')).forEach(x=>{const p=x.p;p.trip=null;p.sdWh=null;p.handed=false;delete p.handedDate;p.left={no:t.no,d:today()};setStageQuiet(p,'ready')});
+    save();toast('رجع '+sel.length+' قطعة متخلفة للمخزن');go('trip');return true},'تسجيل كعفش متخلف');
+  $('.modal').style.width='min(720px,100%)'}
+function leftPill(arr){const n=[...new Set(arr.filter(x=>x.p.left).map(x=>x.p.left.no))];return n.length?' <span style="white-space:nowrap;display:inline-block">'+pill('متخلف من رحلة '+esc(n.join('، ')),'red')+'</span>':''}
+/* ---------- منفستو الرحلة ---------- */
+function manifestHTML(t){
+  const ps=tripPieces(t).sort((a,b)=>a.ci-b.ci),gs=grpBy(ps);
+  const rows=gs.map((arr,i)=>{const x=arr[0],m=new Map();
+    arr.forEach(y=>{const key=y.p.item+(y.p.status?' ('+y.p.status+')':'');m.set(key,(m.get(key)||0)+1)});
+    const desc=[...m].map(([n,q])=>(q>1?q+' ':'')+n).join('، '),restN=x.s.pieces.filter(p=>p.trip!==t.id).length;
+    return `<tr><td>${i+1}</td><td>${esc(x.c.name)}</td><td dir="ltr">${esc(x.c.phone||x.s.senderPh||'')}</td><td>${docNoOf(x.s)}</td><td>${esc(x.s.recv||'')}${x.s.recvPh?'<br><span dir="ltr">'+esc(x.s.recvPh)+'</span>':''}</td><td style="text-align:right">${esc(desc)}</td><td><b>${arr.length}</b></td><td>${esc(x.s.city||'')}</td><td style="min-width:90px">${restN?'باقي '+restN+' قطعة من البوليصة لم تُشحن':''}</td></tr>`}).join('')||'<tr><td colspan="9">لا يوجد عفش في الرحلة</td></tr>';
+  return `<div class="bill">
+  <div class="bhead"><img src="${LOGO}" alt=""><div class="bcenter"><b>شركة تساهيل للشحن الدولي</b><span>مصر ⇄ السودان</span></div><div class="btitle">منفستو الرحلة<small>No. ${esc(t.no)}</small></div></div>
+  <div class="bgrid"><div>رقم الرحلة: <u>${esc(t.no)}</u></div><div>التاريخ: <u>${esc(t.date||'')}</u></div><div>الوجهة: <u>${esc(t.dest||'')}</u></div><div>رقم السيارة: <u>${esc(t.car||'')}</u></div><div>اسم السائق: <u>${esc(t.driver||'')}</u></div><div>هاتف السائق: <u dir="ltr">${esc(t.driverPh||'')}</u></div><div>عدد العملاء: <u>${gs.length}</u></div><div>إجمالي القطع: <u>${ps.length}</u></div></div>
+  <table style="text-align:center"><thead><tr><th>م</th><th>اسم العميل</th><th>الهاتف</th><th>رقم البوليصة</th><th>المستلم</th><th>البيان</th><th>العدد</th><th>الوجهة</th><th>ملاحظات</th></tr></thead><tbody>${rows}
+  <tr><th colspan="6">الإجمالي</th><th>${ps.length}</th><th colspan="2"></th></tr></tbody></table>
+  <div class="bsign"><div>توقيع السائق:</div><div>مسؤول التحميل:</div><div>المستلم بالسودان:</div><div>ختم الشركة:</div></div>
+  <div class="baddr">العنوان: ${esc(db.settings.addr||'')}</div></div>`}
+function printManifest(){const t=db.trips[curTrip];if(!t)return;if(!tripPieces(t).length){toast('أضف عفش للرحلة الأول');return}printArea(manifestHTML(t))}
 function rmFromTrip(ci,si,pi){db.customers[ci].shipments[si].pieces[pi].trip=null;setStageQuiet(db.customers[ci].shipments[si].pieces[pi],'ready');save();go('trip')}
 function pickForTrip(){
   openModal('إضافة عفش للرحلة',`<div style="margin-bottom:12px"><label style="font-size:11px;color:#62758d">المخزن</label><select id="pkWh" onchange="renderPick()" style="width:100%;padding:9px;border:1px solid #dce5f0;border-radius:9px"><option value="">كل المخازن</option>${db.warehouses.filter(w=>w.country!=='SD').map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div><div id="pkList"></div>`,()=>{
     const sel=[...document.querySelectorAll('.pchk2:checked')];if(!sel.length){toast('اختار قطعة واحدة على الأقل');return false}
     const t=db.trips[curTrip],warn=new Set();
-    sel.forEach(k=>{const [a,b,d]=k.value.split('_').map(Number);db.customers[a].shipments[b].pieces[d].trip=t.id;setStageQuiet(db.customers[a].shipments[b].pieces[d],'shipped');const c=db.customers[a];if(custTotal(c)-custPaid(c)>0)warn.add(c.name)});
+    sel.forEach(k=>{const [a,b,d]=k.value.split('_').map(Number);db.customers[a].shipments[b].pieces[d].trip=t.id;delete db.customers[a].shipments[b].pieces[d].left;setStageQuiet(db.customers[a].shipments[b].pieces[d],'shipped');const c=db.customers[a];if(custTotal(c)-custPaid(c)>0)warn.add(c.name)});
     save();toast(warn.size?'تمت الإضافة · تنبيه: '+warn.size+' عميل عليه متبقي رسوم':'تمت إضافة '+sel.length+' قطعة');go('trip');return true},'إضافة للرحلة');
   $('.modal').style.width='min(720px,100%)';renderPick();
 }
 function renderPick(){
-  const f=$('#pkWh').value,groups={};
-  allPieces().filter(x=>x.p.wh!=null&&!x.p.trip&&(!f||x.p.wh===+f)).forEach(x=>{(groups[x.ci]=groups[x.ci]||[]).push(x)});
-  const keys=Object.keys(groups);
-  $('#pkList').innerHTML=keys.map(ci=>{const c=db.customers[ci],rest=custTotal(c)-custPaid(c);
-    return `<div style="border:1px solid #edf1f6;border-radius:10px;padding:10px;margin-bottom:10px"><label style="display:flex;gap:10px;align-items:center;font-weight:bold;font-size:13px"><input type="checkbox" style="width:auto" onchange="this.closest('div').querySelectorAll('.pchk2').forEach(k=>k.checked=this.checked)"> ${esc(c.name)} ${rest>0?pill('⚠ عليه متبقي '+num(rest),'orange'):pill('خالص','green')}</label>
-    ${groups[ci].map(x=>`<label style="display:flex;gap:10px;align-items:center;padding:6px 22px;font-size:12px"><input type="checkbox" class="pchk2" value="${x.ci}_${x.si}_${x.pi}" style="width:auto"> ${esc(x.p.item)} <span style="color:#73849B;font-size:11px">${pieceCode(x.s,x.pi)} · ${esc(whName(x.p.wh))}</span></label>`).join('')}</div>`}).join('')||'<p style="color:#73849B;text-align:center;padding:20px">لا يوجد عفش مخزّن متاح للرحلة. خزّن العفش في المخازن الأول.</p>';
+  const f=$('#pkWh').value,t=db.trips[curTrip]||{},td=normAr(t.dest);
+  const gs=grpBy(allPieces().filter(x=>x.p.wh!=null&&!x.p.trip&&(!f||x.p.wh===+f)).sort((a,b)=>a.ci-b.ci));
+  $('#pkList').innerHTML=(gs.length?`<label style="display:flex;gap:10px;align-items:center;font-weight:bold;padding:0 4px 10px;font-size:13px"><input type="checkbox" style="width:auto" onchange="document.querySelectorAll('#pkList .pchk2,#pkList .pgchk').forEach(k=>k.checked=this.checked)"> تحديد الكل</label>`:'')+
+  gs.map(arr=>{const x=arr[0],c=x.c,rest=custTotal(c)-custPaid(c),same=td&&normAr(x.s.city)===td,whs=[...new Set(arr.map(y=>whName(y.p.wh)))];
+    return `<div style="border:1px solid ${same?'#cfe3fb':'#edf1f6'};border-radius:10px;padding:10px;margin-bottom:10px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="pgchk" style="width:auto" onchange="this.closest('div').parentNode.querySelectorAll('.pchk2').forEach(k=>k.checked=this.checked)">
+    <b style="font-size:13px">${esc(c.name)}</b> <span style="font-size:11px;color:#73849B">${docNoOf(x.s)} · الوجهة: <b style="color:${same?'#159B72':'#314760'}">${esc(x.s.city||'—')}</b> · ${esc(whs.join('، '))}</span>
+    ${rest>0?pill('⚠ عليه متبقي '+num(rest),'orange'):pill('خالص','green')}${leftPill(arr)}</div>
+    <div style="font-size:12px;margin:6px 30px 0;color:#314760">${esc(itemsSum(arr.map(y=>y.p.item)).join('، '))} — <b>${arr.length} قطعة</b> <a href="javascript:void(0)" onclick="const d=this.parentNode.nextElementSibling;d.style.display=d.style.display==='none'?'':'none'" style="font-size:11px;color:#1d67bd;margin-inline-start:6px">اختيار قطع معينة</a></div>
+    <div style="display:none">${arr.map(y=>`<label style="display:flex;gap:10px;align-items:center;padding:5px 30px;font-size:12px"><input type="checkbox" class="pchk2" value="${y.ci}_${y.si}_${y.pi}" style="width:auto"> ${esc(y.p.item)} <span style="color:#73849B;font-size:11px">${pieceCode(y.s,y.pi)} · ${esc(whName(y.p.wh))}</span></label>`).join('')}</div></div>`}).join('')||'<p style="color:#73849B;text-align:center;padding:20px">لا يوجد عفش مخزّن متاح للرحلة. خزّن العفش في المخازن الأول.</p>';
 }
 function addExp(){
   openModal('إضافة مصروف',`<div class="formgrid">${field('النوع',`<select id="xKind"><option value="general">عامة (على الشركة)</option><option value="customs">إضافية / جمركية (تتقسم على العملاء)</option></select>`)}
