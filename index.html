@@ -192,7 +192,7 @@ function itemsSum(items,withSt){const m=new Map();
     let e=m.get(k);if(!e){e={lbl,q:0,of:o.part?o.part.of:0};m.set(k,e)}e.q++});
   return [...m.values()].map(e=>e.of?e.lbl+' ('+(e.q<e.of?e.q+' من '+qTxt(e.of):qTxt(e.of))+')':(e.q>1?e.q+' '+e.lbl:e.lbl))}
 /* ---------- تقسيم البند لقطع بعد التغليف (غرف نوم / أطفال / أطقم جلوس / ضمياطي...) ---------- */
-const SET_KW=['غرفه نوم','نوم','اطفال','انتريه','طقم','جلوس','ضمياطي','دمياطي','صالون','ركنه','سفره','كنب'];
+const SET_KW=['غرفه نوم','نوم','اطفال','جلوس','انتريه','ضمياطي','دمياطي','صالون'];
 function isSetItem(name){const n=normAr(name);return SET_KW.some(k=>n.includes(normAr(k)))}
 const needSplit=p=>!!p&&!p.part&&isSetItem(p.item);
 function splitPiece(s,pi,N){N=Math.floor(+N||0);const p=s.pieces[pi];if(!p||p.part||N<2)return false;
@@ -213,14 +213,14 @@ function expandList(list){const out=[],seen=new Set();list.forEach(x=>{
   if(x.p.part)x.s.pieces.forEach((p,pi)=>{if(p.part&&p.part.g===x.p.part.g&&!seen.has(p)){seen.add(p);out.push(Object.assign({},x,{p,pi}))}});
   else if(!seen.has(x.p)){seen.add(x.p);out.push(x)}});return out}
 let splitQ=[],splitAfter=null;
-function splitAsk(k,after){
+function splitAsk(k,after,allItems){
   const arr=fromKeys(k),seen=new Set();splitQ=[];
   arr.forEach(x=>{if(x.p.part){if(seen.has(x.p.part.g))return;seen.add(x.p.part.g);splitQ.push({c:x.c,s:x.s,g:x.p.part.g,item:x.p.item,of:x.p.part.of})}
-    else if(isSetItem(x.p.item)||arr.length===1)splitQ.push({c:x.c,s:x.s,p:x.p,item:x.p.item})});
+    else if(allItems||isSetItem(x.p.item)||arr.length===1)splitQ.push({c:x.c,s:x.s,p:x.p,item:x.p.item})});
   if(!splitQ.length){if(after)after();return}
   splitAfter=after||null;
-  openModal('عدد القطع بعد التغليف',`<div class="notice">اكتب كل بند اتغلف في كام قطعة (مثلاً غرفة النوم اتغلفت 6 قطع). كل قطعة هتتتبع لوحدها في المخزن والرحلة والمتخلف والاستلام، <b>والسعر في البوليصة مش هيتغير</b>.</div>
-    <div class="tablewrap"><table><thead><tr><th>العميل</th><th>البند</th><th>الحالي</th><th>عدد القطع</th></tr></thead><tbody>${splitQ.map((q,i)=>`<tr><td>${esc(q.c.name)}</td><td>${esc(q.item)}<div style="font-size:10px;color:#73849B">${docNoOf(q.s)}</div></td><td>${q.of?qTxt(q.of):'لم يُحدد'}</td><td><input id="spN${i}" type="number" min="1" max="60" value="${q.of||''}" placeholder="مثلاً 6" style="max-width:110px"></td></tr>`).join('')}</tbody></table></div>
+  openModal('عدد القطع بعد التغليف',`<div class="notice">اكتب كل بند بقى كام قطعة بعد التغليف، أي رقم إنت عايزه، وسيب الخانة فاضية للبند اللي مش هيتقسم. كل قطعة هتتتبع لوحدها في المخزن والرحلة والمتخلف والاستلام، <b>والسعر في البوليصة مش هيتغير</b>.</div>
+    <div class="tablewrap"><table><thead><tr><th>العميل</th><th>البند</th><th>الحالي</th><th>عدد القطع</th></tr></thead><tbody>${splitQ.map((q,i)=>`<tr><td>${esc(q.c.name)}</td><td>${esc(q.item)}<div style="font-size:10px;color:#73849B">${docNoOf(q.s)}</div></td><td>${q.of?qTxt(q.of):'لم يُحدد'}</td><td><input id="spN${i}" type="number" min="1" step="1" inputmode="numeric" value="${q.of||''}" placeholder="اكتب العدد" style="max-width:120px"></td></tr>`).join('')}</tbody></table></div>
     ${after?`<div style="margin-top:10px"><a href="javascript:void(0)" onclick="splitSkip()" style="font-size:12px;color:#73849B">تخطي دلوقتي ←</a></div>`:''}`,()=>{
     let n=0,err='';
     splitQ.forEach((q,i)=>{const v=Math.floor(+$('#spN'+i).value||0);if(!v)return;
@@ -231,6 +231,16 @@ function splitAsk(k,after){
     if(n)toast('تم تحديد عدد القطع لـ '+n+' بند');
     go(current);const a=splitAfter;splitAfter=null;if(a)setTimeout(a,30);return true},'حفظ');
   $('.modal').style.width='min(640px,100%)'}
+/* فحص وتصليح تلقائي بعد الدخول: لو محاولة حفظ فشلت في نص التقسيم وسابت ترقيم غلط (مثلاً 3 قطع مكتوب عليها 1/6) */
+function fixSplits(){let n=0;
+  db.customers.forEach(c=>c.shipments.forEach(s=>{if(!s.pieces)return;const g=new Map();
+    s.pieces.forEach(p=>{if(p.part&&p.part.g!=null){if(!g.has(p.part.g))g.set(p.part.g,[]);g.get(p.part.g).push(p)}});
+    let ch=false;g.forEach(arr=>{const N=arr.length;arr.forEach((p,i)=>{if(N===1){delete p.part;ch=true}else if(p.part.n!==i+1||p.part.of!==N){p.part={g:p.part.g,n:i+1,of:N};ch=true}})});
+    const sum=s.pieces.reduce((a,p)=>a+(+p.cost||0),0),net=(+s.total||0);
+    if(g.size&&net&&Math.abs(sum-net)>1)ch=true;
+    if(ch){if(s.lines&&s.lines.length)applyDiscountToPieces(s);n++}}));
+  if(n){save();toast('🔧 تم تصليح ترقيم القطع في '+n+' بوليصة تلقائياً');if(current==='warehouse'||current==='trip'||current==='home')go(current)}
+  return n}
 function splitSkip(){closeModal();const a=splitAfter;splitAfter=null;if(a)a()}
 function pieceLabel(p){return p?(p.part?p.item+' — قطعة '+p.part.n+'/'+p.part.of:p.item):''}
 function waOpen(c,nos,status,items){
@@ -553,7 +563,7 @@ function openGroup(k){
   openModal('عفش '+x0.c.name+' — '+docNoOf(x0.s),
     `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:12px;color:#314760"><span>الكود: <b>${esc(x0.c.code||'—')}</b></span><span>الوجهة: <b>${esc(x0.s.city||'—')}</b></span><span>المخزن: <b>${esc(w.name)}</b></span><span>عدد القطع: <b>${arr.length}</b></span><span dir="ltr">${esc(x0.c.phone||'')}</span></div>
     <div class="tablewrap"><table><thead><tr><th>رقم القطعة</th><th>القطعة</th><th>التغليف</th><th>${sd?'الرحلة':'الحالة'}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div style="margin-top:12px">${btn('واتساب للعميل',`grpWa('${k2}')`,'soft')}</div>`,null);
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${btn('واتساب للعميل',`grpWa('${k2}')`,'soft')} ${sd?'':btn('✂ تحديد عدد القطع (كل البنود)',`splitAsk('${k2}',()=>openGroup(shipKeys(${x0.ci},${x0.si})),true)`,'soft')}</div>`,null);
   $('.modal').style.width='min(820px,100%)'}
 function pStage(ci,si,pi,k,v){setStageQuiet(db.customers[ci].shipments[si].pieces[pi],v);save();toast('تم التحديث: '+stageName(v));go('warehouse');openGroup(k)}
 function pMove(ci,si,pi,k,v){if(!v)return;const p=db.customers[ci].shipments[si].pieces[pi];if(curWhObj().country==='SD')p.sdWh=+v;else p.wh=+v;save();toast('تم نقل القطعة إلى '+whName(+v));go('warehouse');openGroup(k)}
@@ -1379,7 +1389,7 @@ async function bootCloud(){
   const pr=await SB.from('profiles').select('*').eq('id',s.user.id).maybeSingle();if(pr.error)throw pr.error;
   if(!pr.data)throw new Error('الحساب غير موجود في النظام، راجع المدير');
   if(!pr.data.active)throw new Error('حسابك غير مفعّل، راجع المدير');
-  const X=await loadAll();applyData(X,s.user.id);READY=true;startPolling()}
+  const X=await loadAll();applyData(X,s.user.id);READY=true;startPolling();setTimeout(()=>{try{fixSplits()}catch(e){console.error(e)}},1500)}
 async function reloadCloud(){const uid=ME&&ME.uid;const X=await loadAll();applyData(X,uid)}
 
 async function pushNow(){
@@ -1391,6 +1401,9 @@ async function pushNow(){
     else for(const part of chunk(gone,100)){const {error}=await SB.from(t).delete().in('id',part);if(error)throw error;part.forEach(k=>old.delete(k))}}
   for(const t of TBL){
     const rows=[];cur[t].forEach((r,k)=>{if(snap[t].get(k)!==stable(r))rows.push([k,r])});
+    /* القطع: لما قطعة تتقسم ترتيب اللي بعدها بيتزحلق، فبنحفظ على مرحلتين (ترتيب مؤقت ثم النهائي) عشان مفيش قطعتين ياخدوا نفس الترتيب لحظياً */
+    if(t==='pieces'&&rows.length){const ex=rows.filter(([k])=>snap[t].has(k));
+      for(const part of chunk(ex,300)){const {error}=await SB.from(t).upsert(part.map(([k,r])=>Object.assign({},r,{idx:1000000+(+r.idx||0)})));if(error)throw error}}
     for(const part of chunk(rows,300)){
       const {error}=await SB.from(t).upsert(part.map(x=>x[1]),t==='trip_shares'?{onConflict:'trip_id,customer_id'}:undefined);
       if(error)throw error;part.forEach(([k,r])=>snap[t].set(k,stable(r)))}}}
