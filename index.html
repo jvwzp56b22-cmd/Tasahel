@@ -108,9 +108,11 @@ function waPhone(p){let d=String(p||'').replace(/[^\d]/g,'');if(d.startsWith('00
 function waText(c,nos,status,items){
   const inq=[db.settings.inq1,db.settings.inq2].map(x=>String(x||'').trim()).filter(Boolean);
   return 'مرحباً '+c.name+'،\nتم تحديث حالة شحنتك رقم '+nos.join('، ')+' لدى '+WA_CO+'.'
-    +(items&&items.length?'\n\nالعفش: '+items.join('، '):'')
+    +(items&&items.length?'\n\nالعفش: '+itemsSum(items).join('، '):'')
     +'\n\nالحالة الحالية: '+status
     +(inq.length?'\n\nللاستفسار: '+inq.join(' - '):'')}
+/* تجميع القطع المتكررة: غسالة، غسالة ← 2 غسالة */
+function itemsSum(items){const m=new Map();(items||[]).forEach(i=>{i=String(i||'').trim();if(i)m.set(i,(m.get(i)||0)+1)});return [...m].map(([n,q])=>q>1?q+' '+n:n)}
 function waOpen(c,nos,status,items){
   const ph=waPhone(c.phone);if(!ph){toast('مفيش رقم تليفون للعميل '+c.name);return}
   window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(waText(c,nos,status,items)),'_blank')}
@@ -206,9 +208,10 @@ warehouse:()=>{
   const all=allPieces(),insideAll=all.filter(x=>x.p.wh===w.id&&!x.p.trip).sort((a,b)=>a.ci-b.ci),inside=stFilter?insideAll.filter(x=>stageOf(x.p)===stFilter):insideAll;
   const waiting={};all.filter(x=>x.p.wh==null).forEach(x=>{(waiting[x.ci]=waiting[x.ci]||[]).push(x)});
   const opts=db.warehouses.filter(o=>o.id!==w.id&&o.country!=='SD').map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
-  const inRows=inside.map(x=>`<tr><td><input type="checkbox" class="stchk" value="${x.ci}_${x.si}_${x.pi}" style="width:auto"></td><td>${esc(x.c.name)}</td><td>${pieceCode(x.s,x.pi)}</td><td>${esc(x.p.item)}</td><td>${esc(x.p.status)||'—'}</td>
-    <td style="white-space:nowrap">${stagePill(x.p)} <select onchange="setStage(${x.ci},${x.si},${x.pi},this.value)" style="padding:6px;border:1px solid #dce5f0;border-radius:8px;margin-inline-start:4px">${STAGES.map(s=>`<option value="${s[0]}"${stageOf(x.p)===s[0]?' selected':''}>${s[1]}</option>`).join('')}</select> ${stageOf(x.p)!=='shipped'?btn('التالي ◂',`nextStage(${x.ci},${x.si},${x.pi})`,'soft'):''} ${btn('واتساب',`waPiece(${x.ci},${x.si},${x.pi})`,'soft')}</td>
-    <td><select onchange="movePiece(${x.ci},${x.si},${x.pi},this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">نقل إلى...</option>${opts}</select> ${btn('إخراج',`unstore(${x.ci},${x.si},${x.pi})`,'')}</td></tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:#73849B;padding:22px">'+(stFilter?'لا توجد قطع بهذه الحالة':'المخزن فاضي')+'</td></tr>';
+  const inRows=grpBy(inside).map(arr=>{const x=arr[0],k=pKeys(arr),st=grpStageOf(arr);
+    return `<tr><td><input type="checkbox" class="stchk" value="${k}" style="width:auto"></td><td>${custLink(x.c,k)}</td><td>${docNoOf(x.s)}</td><td>${esc(x.s.city||'—')}</td><td style="white-space:normal;min-width:140px">${esc(itemsSum(arr.map(y=>y.p.item)).join('، '))}</td><td><b>${arr.length}</b></td>
+    <td style="white-space:nowrap">${grpStagePill(arr)} <select onchange="grpStage('${k}',this.value)" style="padding:6px;border:1px solid #dce5f0;border-radius:8px;margin-inline-start:4px">${st?'':'<option value="" selected>تحديث الكل...</option>'}${STAGES.map(s=>`<option value="${s[0]}"${st===s[0]?' selected':''}>${s[1]}</option>`).join('')}</select> ${st!=='shipped'?btn('التالي ◂',`grpNext('${k}')`,'soft'):''} ${btn('واتساب',`grpWa('${k}')`,'soft')}</td>
+    <td style="white-space:nowrap"><select onchange="grpMove('${k}',this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">نقل الكل إلى...</option>${opts}</select> ${btn('إخراج الكل',`grpUnstore('${k}')`,'')}</td></tr>`}).join('')||'<tr><td colspan="8" style="text-align:center;color:#73849B;padding:22px">'+(stFilter?'لا توجد قطع بهذه الحالة':'المخزن فاضي')+'</td></tr>';
   const wKeys=Object.keys(waiting);
   const wRows=wKeys.map(ci=>{const arr=waiting[ci],c=db.customers[ci];
     return `<tr><td>${esc(c.code)}</td><td>${esc(c.name)}</td><td>${arr.map(x=>esc(x.p.item)).join('، ')}</td><td>${arr.length}</td><td>${btn('فتح العفش',`openStore(${ci})`,'soft')} ${btn('كله لهذا المخزن',`storeAll(${ci})`,'')}</td></tr>`}).join('')||'<tr><td colspan="5" style="text-align:center;color:#73849B;padding:22px">لا يوجد عفش بانتظار التخزين</td></tr>';
@@ -217,7 +220,7 @@ warehouse:()=>{
   <div class="panel"><div class="panelhead"><h3>العفش داخل ${esc(w.name)}</h3></div>
   <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">${[['','الكل',insideAll.length]].concat(STAGES.map(s=>[s[0],s[1],insideAll.filter(x=>stageOf(x.p)===s[0]).length])).map(t=>`<button class="btn ${stFilter===t[0]?'primary':'soft'}" onclick="setStFilter('${t[0]}')">${t[1]} (${t[2]})</button>`).join('')}</div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#f5f9ff;border:1px solid #e2edfa;border-radius:10px;padding:10px 12px;margin-bottom:12px"><b style="font-size:12px">تحديث حالة المحدد:</b><select id="bulkSt" style="padding:8px;border:1px solid #dce5f0;border-radius:8px"><option value="">اختار الحالة...</option>${STAGES.map(s=>`<option value="${s[0]}">${s[1]}</option>`).join('')}</select>${btn('تحديث','bulkStage()')}</div>
-  <div class="tablewrap"><table><thead><tr><th><input type="checkbox" style="width:auto" onchange="document.querySelectorAll('.stchk').forEach(k=>k.checked=this.checked)"></th><th>العميل</th><th>رقم القطعة</th><th>القطعة</th><th>التغليف</th><th>حالة القطعة</th><th></th></tr></thead><tbody>${inRows}</tbody></table></div></div>`;
+  <div class="tablewrap"><table><thead><tr><th><input type="checkbox" style="width:auto" onchange="document.querySelectorAll('.stchk').forEach(k=>k.checked=this.checked)"></th><th>العميل</th><th>البوليصة</th><th>الوجهة</th><th>القطع</th><th>العدد</th><th>الحالة</th><th></th></tr></thead><tbody>${inRows}</tbody></table></div></div>`;
 },
 trips:()=>{
   const rows=db.trips.map((t,i)=>{const ps=tripPieces(t),cs=new Set(ps.map(x=>x.ci)).size;
@@ -361,8 +364,8 @@ function setStage(ci,si,pi,k){setStageQuiet(db.customers[ci].shipments[si].piece
 function nextStage(ci,si,pi){const p=db.customers[ci].shipments[si].pieces[pi],i=STAGES.findIndex(s=>s[0]===stageOf(p));if(i>=STAGES.length-1){toast('القطعة وصلت لآخر حالة');return}setStage(ci,si,pi,STAGES[i+1][0])}
 function bulkStage(){const k=$('#bulkSt').value;if(!k){toast('اختار الحالة الأول');return}
   const sel=[...document.querySelectorAll('.stchk:checked')];if(!sel.length){toast('حدد قطعة واحدة على الأقل');return}
-  const wl=[];sel.forEach(c=>{const [a,b,d]=c.value.split('_').map(Number);const s=db.customers[a].shipments[b];setStageQuiet(s.pieces[d],k);wl.push({c:db.customers[a],s,p:s.pieces[d]})});
-  save();toast('تم تحديث '+sel.length+' قطعة: '+stageName(k));go('warehouse');waPrompt(wl,stageName(k))}
+  const wl=[];sel.forEach(c=>fromKeys(c.value).forEach(x=>{setStageQuiet(x.p,k);wl.push(x)}));
+  save();toast('تم تحديث '+wl.length+' قطعة: '+stageName(k));go('warehouse');waPrompt(wl,stageName(k))}
 function setStFilter(k){stFilter=k;go('warehouse')}
 function locPanel(c){
   const rows=[];c.shipments.forEach(s=>{ensurePieces(s);s.pieces.forEach((p,i)=>rows.push(`<tr><td>${pieceCode(s,i)}</td><td>${esc(p.item)}</td><td>${p.handed?pill('تم الاستلام','green'):p.sdWh!=null?pill('مخزن السودان: '+esc(whName(p.sdWh)),'green'):(p.trip&&tripDone(db.trips.find(t=>t.id===p.trip)))?pill('وصل السودان - بانتظار التخزين','orange'):p.trip?pill('في الرحلة '+esc((db.trips.find(t=>t.id===p.trip)||{}).no||''),'green'):(p.wh==null?pill('لم يُخزَّن','orange'):pill(esc(whName(p.wh)),'green'))}</td><td>${(p.handed||p.sdWh!=null)?'—':stagePill(p)}</td></tr>`))});
@@ -395,6 +398,50 @@ function storeEveryone(){
   arr.forEach(x=>x.p.wh=w.id);save();toast('تم التخزين');go('warehouse')}
 function movePiece(ci,si,pi,v){if(!v)return;db.customers[ci].shipments[si].pieces[pi].wh=+v;save();toast('تم نقل القطعة إلى '+whName(+v));go('warehouse')}
 function unstore(ci,si,pi){db.customers[ci].shipments[si].pieces[pi].wh=null;delete db.customers[ci].shipments[si].pieces[pi].stage;save();toast('رجعت القطعة لقائمة الانتظار');go('warehouse')}
+
+/* ---------- دمج عفش العميل في المخزن (سطر لكل بوليصة) ---------- */
+function grpBy(arr){const m=new Map();arr.forEach(x=>{const k=x.ci+'_'+x.si;if(!m.has(k))m.set(k,[]);m.get(k).push(x)});return [...m.values()]}
+const pKeys=arr=>arr.map(x=>x.ci+'_'+x.si+'_'+x.pi).join(',');
+function fromKeys(k){return String(k||'').split(',').filter(Boolean).map(v=>{const [ci,si,pi]=v.split('_').map(Number),c=db.customers[ci],s=c&&c.shipments[si],p=s&&s.pieces&&s.pieces[pi];return p?{c,ci,s,si,p,pi}:null}).filter(Boolean)}
+function custLink(c,k){return `<a href="javascript:void(0)" onclick="openGroup('${k}')" style="color:#1d67bd;font-weight:bold;text-decoration:none;border-bottom:1px dashed #1d67bd">${esc(c.name)}</a>`}
+function grpStageOf(arr){const s=[...new Set(arr.map(x=>stageOf(x.p)))];return s.length===1?s[0]:''}
+function grpStagePill(arr){const k=grpStageOf(arr);if(k)return stagePill(arr[0].p);
+  const t=STAGES.map(s=>[s[1],arr.filter(x=>stageOf(x.p)===s[0]).length]).filter(s=>s[1]).map(s=>s[0]+': '+s[1]).join(' · ');
+  return `<span title="${esc(t)}">${pill('حالات مختلفة','orange')}</span>`}
+/* نص الحالة للواتساب: «تم التغليف: 2 غسالة، تلاجة» لكل حالة */
+function stageLines(arr){return STAGES.map(s=>{const it=arr.filter(x=>stageOf(x.p)===s[0]).map(x=>x.p.item);return it.length?s[1]+': '+itemsSum(it).join('، '):''}).filter(Boolean)}
+function curWhObj(){return db.warehouses[curWh]||{}}
+function grpStage(k,st){if(!st)return;const arr=fromKeys(k);arr.forEach(x=>setStageQuiet(x.p,st));save();toast('تم تحديث '+arr.length+' قطعة: '+stageName(st));go('warehouse');waPrompt(arr,stageName(st))}
+function grpNext(k){const arr=fromKeys(k);if(!arr.length)return;const i=Math.min(...arr.map(x=>STAGES.findIndex(s=>s[0]===stageOf(x.p))));
+  if(i>=STAGES.length-1){toast('العفش وصل لآخر حالة');return}grpStage(k,STAGES[i+1][0])}
+function grpWa(k){const arr=fromKeys(k);if(!arr.length)return;
+  if(curWhObj().country==='SD'){waPrompt(arr,'العفش وصل السودان وجاهز للاستلام');return}
+  const st=grpStageOf(arr);if(st){waPrompt(arr,stageName(st));return}
+  const x=arr[0],nos=[docNoOf(x.s)],status='\n'+stageLines(arr).join('\n');
+  openModal('إرسال واتساب للعميل',`<p style="font-size:14px;line-height:1.9">تبعت رسالة واتساب لـ <b>${esc(x.c.name)}</b> بحالة عفشه؟</p><div class="notice" style="white-space:pre-line;margin-top:10px">${esc(waText(x.c,nos,status,[]))}</div>`,()=>{waOpen(x.c,nos,status,[])},'إرسال واتساب')}
+function grpMove(k,v){if(!v)return;const arr=fromKeys(k),sd=curWhObj().country==='SD';arr.forEach(x=>{if(sd)x.p.sdWh=+v;else x.p.wh=+v});save();toast('تم نقل '+arr.length+' قطعة إلى '+whName(+v));go('warehouse')}
+function grpUnstore(k){const arr=fromKeys(k),sd=curWhObj().country==='SD';if(!confirm('إخراج '+arr.length+' قطعة من المخزن ورجوعها لقائمة الانتظار؟'))return;
+  arr.forEach(x=>{if(sd)x.p.sdWh=null;else{x.p.wh=null;delete x.p.stage}});save();toast('رجع '+arr.length+' قطعة لقائمة الانتظار');go('warehouse')}
+function grpHandover(k){const arr=fromKeys(k);if(!confirm('تأكيد إن '+(arr[0]?arr[0].c.name:'العميل')+' استلم '+arr.length+' قطعة؟'))return;
+  arr.forEach(x=>{x.p.handed=true;x.p.handedDate=today()});save();toast('تم تسجيل استلام '+arr.length+' قطعة');go('warehouse')}
+/* تفاصيل عفش العميل (لما تدوس على اسمه) */
+function openGroup(k){
+  const w=curWhObj(),sd=w.country==='SD',arr=fromKeys(k).filter(x=>sd?(x.p.sdWh===w.id&&!x.p.handed):(x.p.wh===w.id&&!x.p.trip));
+  if(!arr.length){closeModal();return}
+  const x0=arr[0],k2=pKeys(arr),sel='padding:6px;border:1px solid #dce5f0;border-radius:8px';
+  const opts=db.warehouses.filter(o=>o.id!==w.id&&(sd?o.country==='SD':o.country!=='SD')).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
+  const rows=arr.map(x=>{const a=`${x.ci},${x.si},${x.pi},'${k2}'`;
+    return `<tr><td>${pieceCode(x.s,x.pi)}</td><td>${esc(x.p.item)}</td><td>${esc(x.p.status)||'—'}</td>${sd?`<td>${esc((db.trips.find(t=>t.id===x.p.trip)||{}).no||'—')}</td>`:`<td style="white-space:nowrap">${stagePill(x.p)} <select onchange="pStage(${a},this.value)" style="${sel}">${STAGES.map(s=>`<option value="${s[0]}"${stageOf(x.p)===s[0]?' selected':''}>${s[1]}</option>`).join('')}</select></td>`}
+    <td style="white-space:nowrap"><select onchange="pMove(${a},this.value)" style="${sel}"><option value="">نقل إلى...</option>${opts}</select> ${sd?btn('تم الاستلام',`pHand(${a})`,'soft'):''} ${btn('إخراج',`pOut(${a})`,'')}</td></tr>`}).join('');
+  openModal('عفش '+x0.c.name+' — '+docNoOf(x0.s),
+    `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:12px;color:#314760"><span>الكود: <b>${esc(x0.c.code||'—')}</b></span><span>الوجهة: <b>${esc(x0.s.city||'—')}</b></span><span>المخزن: <b>${esc(w.name)}</b></span><span>عدد القطع: <b>${arr.length}</b></span><span dir="ltr">${esc(x0.c.phone||'')}</span></div>
+    <div class="tablewrap"><table><thead><tr><th>رقم القطعة</th><th>القطعة</th><th>التغليف</th><th>${sd?'الرحلة':'الحالة'}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="margin-top:12px">${btn('واتساب للعميل',`grpWa('${k2}')`,'soft')}</div>`,null);
+  $('.modal').style.width='min(820px,100%)'}
+function pStage(ci,si,pi,k,v){setStageQuiet(db.customers[ci].shipments[si].pieces[pi],v);save();toast('تم التحديث: '+stageName(v));go('warehouse');openGroup(k)}
+function pMove(ci,si,pi,k,v){if(!v)return;const p=db.customers[ci].shipments[si].pieces[pi];if(curWhObj().country==='SD')p.sdWh=+v;else p.wh=+v;save();toast('تم نقل القطعة إلى '+whName(+v));go('warehouse');openGroup(k)}
+function pOut(ci,si,pi,k){const p=db.customers[ci].shipments[si].pieces[pi];if(curWhObj().country==='SD')p.sdWh=null;else{p.wh=null;delete p.stage}save();toast('رجعت القطعة لقائمة الانتظار');go('warehouse');openGroup(k)}
+function pHand(ci,si,pi,k){if(!confirm('تأكيد إن العميل استلم هذه القطعة؟'))return;const p=db.customers[ci].shipments[si].pieces[pi];p.handed=true;p.handedDate=today();save();toast('تم تسجيل الاستلام');go('warehouse');openGroup(k)}
 
 /* ---------- Sudan warehouses ---------- */
 const tripDone=t=>!!(t&&t.deliveredAt&&(t.status==='delivered'||t.status==='closed'));
@@ -429,13 +476,13 @@ function sdWhPage(){
 function sdWarehousePage(w){
   const all=allPieces(),inside=all.filter(x=>x.p.sdWh===w.id&&!x.p.handed).sort((a,b)=>a.ci-b.ci),g=sdGroups();
   const opts=db.warehouses.filter(o=>o.country==='SD'&&o.id!==w.id).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
-  const inRows=inside.map(x=>{const t=db.trips.find(t=>t.id===x.p.trip)||{};
-    return `<tr><td>${esc(x.c.name)}</td><td>${pieceCode(x.s,x.pi)}</td><td>${esc(x.p.item)}</td><td>${esc(t.no||'—')}</td><td style="white-space:nowrap"><select onchange="sdMove(${x.ci},${x.si},${x.pi},this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">نقل إلى...</option>${opts}</select> ${btn('تم الاستلام',`sdHandover(${x.ci},${x.si},${x.pi})`,'soft')} ${btn('إخراج',`sdUnstore(${x.ci},${x.si},${x.pi})`,'')}</td></tr>`}).join('')||emptyRow(5,'المخزن فاضي');
+  const inRows=grpBy(inside).map(arr=>{const x=arr[0],k=pKeys(arr),trs=[...new Set(arr.map(y=>(db.trips.find(t=>t.id===y.p.trip)||{}).no).filter(Boolean))];
+    return `<tr><td>${custLink(x.c,k)}</td><td>${docNoOf(x.s)}</td><td>${esc(x.s.city||'—')}</td><td>${esc(trs.join('، ')||'—')}</td><td style="white-space:normal;min-width:140px">${esc(itemsSum(arr.map(y=>y.p.item)).join('، '))}</td><td><b>${arr.length}</b></td><td style="white-space:nowrap"><select onchange="grpMove('${k}',this.value)" style="padding:7px;border:1px solid #dce5f0;border-radius:8px"><option value="">نقل الكل إلى...</option>${opts}</select> ${btn('تم الاستلام (الكل)',`grpHandover('${k}')`,'soft')} ${btn('واتساب',`grpWa('${k}')`,'soft')} ${btn('إخراج الكل',`grpUnstore('${k}')`,'')}</td></tr>`}).join('')||emptyRow(7,'المخزن فاضي');
   const wRows=Object.keys(g).map(k=>{const arr=g[k],t=db.trips.find(t=>t.id===arr[0].p.trip)||{};
     return `<tr><td>${esc(arr[0].c.code)}</td><td>${esc(arr[0].c.name)}</td><td>${esc(t.no||'')}</td><td>${arr.map(x=>esc(x.p.item)).join('، ')}</td><td>${arr.length}</td><td>${btn('كله لهذا المخزن',`sdAssign('${k}',${w.id})`,'')}</td></tr>`}).join('')||emptyRow(6,'لا يوجد عفش بانتظار التخزين');
   return pageHead(esc(w.name),`${inside.length} قطعة داخل المخزن`,btn('→ رجوع',"go('warehouses')",''))+
   `<div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>عملاء بانتظار تحديد المخزن</h3><small>اختار هل عفشهم هيتخزن في ${esc(w.name)}</small></div><div class="tablewrap"><table><thead><tr><th>الكود</th><th>العميل</th><th>الرحلة</th><th>القطع</th><th>العدد</th><th></th></tr></thead><tbody>${wRows}</tbody></table></div></div>
-  <div class="panel"><div class="panelhead"><h3>العفش داخل ${esc(w.name)}</h3><small>لحد ما العميل يرجع ويستلمه</small></div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>رقم القطعة</th><th>القطعة</th><th>الرحلة</th><th></th></tr></thead><tbody>${inRows}</tbody></table></div></div>`;
+  <div class="panel"><div class="panelhead"><h3>العفش داخل ${esc(w.name)}</h3><small>لحد ما العميل يرجع ويستلمه</small></div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>البوليصة</th><th>الوجهة</th><th>الرحلة</th><th>القطع</th><th>العدد</th><th></th></tr></thead><tbody>${inRows}</tbody></table></div></div>`;
 }
 
 /* ---------- trips ---------- */
