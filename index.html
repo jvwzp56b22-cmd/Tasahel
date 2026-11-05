@@ -675,16 +675,8 @@ function autoSdStore(t){const w=findSdWh(t.dest),ps=tripPieces(t).filter(x=>!x.p
 function delTrip(i){const t=db.trips[i];if(!t)return;
   const ps=tripPieces(t),gone=ps.filter(x=>x.p.handed),sd=ps.filter(x=>!x.p.handed&&x.p.sdWh!=null),back=ps.filter(x=>!x.p.handed&&x.p.sdWh==null);
   if(gone.length){toast('مينفعش تتحذف: فيها '+gone.length+' قطعة اتسلّمت للعملاء في السودان');return}
-  const ex=(t.expenses||[]).length,cs=new Set(ps.map(x=>x.ci)).size;
-  openModal('حذف الرحلة '+t.no,`<div class="notice" style="background:#ffebed;color:#a8323c">الحذف نهائي ومفيش رجوع فيه.</div>
-    <p style="font-size:13px;line-height:2;margin:0">الرحلة <b>${esc(t.no)}</b>${t.dest?' · '+esc(t.dest):''}${t.date?' · '+esc(t.date):''}<br>
-    ${ps.length?`فيها <b>${ps.length} قطعة</b> لـ <b>${cs} عميل</b>. ${sd.length?`<b>${sd.length}</b> منهم متخزنين في مخازن السودان و`:''}كل القطع هترجع لمخازنها في مصر بحالة «جاهز للشحن» عشان تتحط في رحلة تانية.`:'الرحلة فاضية، مفيهاش عفش.'}
-    ${ex?`<br>هيتحذف معاها <b>${ex}</b> مصروف وتقسيم الرسوم الإضافية بتاعها.`:''}</p>
-    <div class="field" style="margin-top:14px"><label>للتأكيد اكتب رقم الرحلة: <b dir="ltr">${esc(t.no)}</b></label><input id="dtConf" dir="ltr" autocomplete="off"></div>`,()=>{
-    if($('#dtConf').value.trim()!==String(t.no)){toast('رقم الرحلة مش مطابق');return false}
-    ps.forEach(x=>{const p=x.p;p.trip=null;p.sdWh=null;delete p.left;setStageQuiet(p,'ready')});
-    db.trips.splice(db.trips.indexOf(t),1);curTrip=null;save();toast('تم حذف الرحلة '+t.no+(ps.length?' ورجع '+ps.length+' قطعة لمخازن مصر':''));go('trips');return true},'حذف نهائي');
-  setTimeout(()=>{const b=$('#saveModal');if(b)b.style.background='#d94c55',b.style.borderColor='#d94c55'},0)}
+  ps.forEach(x=>{const p=x.p;p.trip=null;p.sdWh=null;delete p.left;setStageQuiet(p,'ready')});
+  db.trips.splice(db.trips.indexOf(t),1);curTrip=null;save();toast('تم حذف الرحلة '+t.no+(ps.length?' ورجع '+ps.length+' قطعة لمخازن مصر':''));go('trips')}
 function rmGroupFromTrip(k){const t=db.trips[curTrip];fromKeys(k).filter(x=>x.p.trip===t.id).forEach(x=>{x.p.trip=null;setStageQuiet(x.p,'ready')});save();go('trip')}
 /* ---------- العفش المتخلف (اللي العربية مشالتهوش) ---------- */
 function leftModal(k){
