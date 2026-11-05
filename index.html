@@ -285,7 +285,7 @@ let modalSave=null;
 function openModal(title,body,onSave,saveText='حفظ'){
   $('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;
   $('#saveModal').textContent=saveText;$('#saveModal').style.display=onSave?'':'none';
-  modalSave=onSave;$('.modal').style.width='';$('#modalback').classList.add('show');
+  modalSave=onSave;$('.modal').style.width='';$('#saveModal').style.background='';$('#saveModal').style.borderColor='';$('#modalback').classList.add('show');
 }
 function closeModal(){$('#modalback').classList.remove('show');modalSave=null}
 
@@ -344,7 +344,7 @@ warehouse:()=>{
 },
 trips:()=>{
   const rows=db.trips.map((t,i)=>{const ps=tripPieces(t),cs=new Set(ps.map(x=>x.ci)).size;
-    return `<tr ondblclick="openTrip(${i})" style="cursor:pointer"><td>${esc(t.no)}</td><td>${esc(t.date)}</td><td>${esc(t.dest)}</td><td>${esc(t.car)}</td><td>${esc(t.driver||'')}</td><td dir="ltr" style="text-align:right">${esc(t.driverPh||'')}</td><td>${ps.length}</td><td>${cs}</td><td>${tripPill(t)}</td><td>${btn('فتح',`openTrip(${i})`,'soft')}</td></tr>`}).join('')||emptyRow(10,'لا توجد رحلات بعد، اضغط "رحلة جديدة"');
+    return `<tr ondblclick="openTrip(${i})" style="cursor:pointer"><td>${esc(t.no)}</td><td>${esc(t.date)}</td><td>${esc(t.dest)}</td><td>${esc(t.car)}</td><td>${esc(t.driver||'')}</td><td dir="ltr" style="text-align:right">${esc(t.driverPh||'')}</td><td>${ps.length}</td><td>${cs}</td><td>${tripPill(t)}</td><td style="white-space:nowrap">${btn('فتح',`openTrip(${i})`,'soft')} ${btn('حذف',`delTrip(${i})`,'')}</td></tr>`}).join('')||emptyRow(10,'لا توجد رحلات بعد، اضغط "رحلة جديدة"');
   return pageHead('الرحلات','اضغط مرتين على الرحلة لفتحها',btn('＋ رحلة جديدة','newTrip()'))+
   `<div class="panel"><div class="tablewrap"><table><thead><tr><th>رقم الرحلة</th><th>التاريخ</th><th>الوجهة</th><th>السيارة</th><th>السائق</th><th>هاتف السائق</th><th>القطع</th><th>العملاء</th><th>الحالة</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 },
@@ -359,7 +359,7 @@ trip:()=>{
   const shareRows=custs.map(c=>{const n=ps.filter(x=>x.c===c).length,fee=ps.filter(x=>x.c===c).reduce((a,x)=>a+(+x.p.cost||0),0);
     return `<tr><td>${esc(c.name)}</td><td>${n}</td><td>${num(fee)}</td><td><input type="number" min="0" value="${t.shares[c.code]||''}" placeholder="0" onchange="setShare(${db.customers.indexOf(c)},this.value)" style="max-width:140px"></td></tr>`}).join('')||emptyRow(4,'أضف عفش للرحلة الأول');
   return pageHead(esc(t.no),`${esc(t.dest)} · ${esc(t.date)}${t.car?' · سيارة '+esc(t.car):''}${t.driver?' · السائق: '+esc(t.driver):''}${t.driverPh?' · '+esc(t.driverPh):''}`,
-    btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft')+btn('🖨 منفستو الرحلة','printManifest()','soft')+btn('عفش متخلف','leftModal(\'\')','soft'))+
+    btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft')+btn('🖨 منفستو الرحلة','printManifest()','soft')+btn('عفش متخلف','leftModal(\'\')','soft')+btn('🗑 حذف الرحلة','delTrip(curTrip)',''))+
   `<div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>العفش في الرحلة (${ps.length} قطعة)</h3>${btn('＋ إضافة عفش للرحلة','pickForTrip()')}</div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>البوليصة</th><th>الوجهة</th><th>القطع</th><th>العدد</th><th>المخزن</th><th>الدفع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>مصاريف الرحلة</h3>${btn('＋ إضافة مصروف','addExp()')}</div><div class="notice" style="margin-bottom:12px">المصاريف العامة (وقود، تحميل...) على الشركة. المصاريف الإضافية / الجمركية هي اللي بتتقسم على العملاء بعد التسليم.</div><div class="tablewrap"><table><thead><tr><th>النوع</th><th>البند</th><th>المبلغ</th><th>التاريخ</th><th></th></tr></thead><tbody>${exp}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>تقسيم الرسوم الإضافية على العملاء</h3><span>${btn('بالتساوي على العملاء','splitExtra(\'eq\')','soft')} ${btn('حسب عدد القطع','splitExtra(\'pc\')','soft')}</span></div>
@@ -650,6 +650,20 @@ function findSdWh(dest){const d=normAr(dest);if(!d)return null;const sds=db.ware
   return sds.find(w=>normAr(w.name)===d)||sds.find(w=>{const n=normAr(w.name);return n.length>=3&&d.length>=3&&(n.includes(d)||d.includes(n))})||null}
 function autoSdStore(t){const w=findSdWh(t.dest),ps=tripPieces(t).filter(x=>!x.p.handed&&x.p.sdWh==null);
   if(w)ps.forEach(x=>x.p.sdWh=w.id);return {w,n:w?ps.length:0}}
+/* ---------- حذف الرحلة ---------- */
+function delTrip(i){const t=db.trips[i];if(!t)return;
+  const ps=tripPieces(t),gone=ps.filter(x=>x.p.handed),sd=ps.filter(x=>!x.p.handed&&x.p.sdWh!=null),back=ps.filter(x=>!x.p.handed&&x.p.sdWh==null);
+  if(gone.length){toast('مينفعش تتحذف: فيها '+gone.length+' قطعة اتسلّمت للعملاء في السودان');return}
+  const ex=(t.expenses||[]).length,cs=new Set(ps.map(x=>x.ci)).size;
+  openModal('حذف الرحلة '+t.no,`<div class="notice" style="background:#ffebed;color:#a8323c">الحذف نهائي ومفيش رجوع فيه.</div>
+    <p style="font-size:13px;line-height:2;margin:0">الرحلة <b>${esc(t.no)}</b>${t.dest?' · '+esc(t.dest):''}${t.date?' · '+esc(t.date):''}<br>
+    ${ps.length?`فيها <b>${ps.length} قطعة</b> لـ <b>${cs} عميل</b>. ${sd.length?`<b>${sd.length}</b> منهم متخزنين في مخازن السودان و`:''}كل القطع هترجع لمخازنها في مصر بحالة «جاهز للشحن» عشان تتحط في رحلة تانية.`:'الرحلة فاضية، مفيهاش عفش.'}
+    ${ex?`<br>هيتحذف معاها <b>${ex}</b> مصروف وتقسيم الرسوم الإضافية بتاعها.`:''}</p>
+    <div class="field" style="margin-top:14px"><label>للتأكيد اكتب رقم الرحلة: <b dir="ltr">${esc(t.no)}</b></label><input id="dtConf" dir="ltr" autocomplete="off"></div>`,()=>{
+    if($('#dtConf').value.trim()!==String(t.no)){toast('رقم الرحلة مش مطابق');return false}
+    ps.forEach(x=>{const p=x.p;p.trip=null;p.sdWh=null;delete p.left;setStageQuiet(p,'ready')});
+    db.trips.splice(db.trips.indexOf(t),1);curTrip=null;save();toast('تم حذف الرحلة '+t.no+(ps.length?' ورجع '+ps.length+' قطعة لمخازن مصر':''));go('trips');return true},'حذف نهائي');
+  setTimeout(()=>{const b=$('#saveModal');if(b)b.style.background='#d94c55',b.style.borderColor='#d94c55'},0)}
 function rmGroupFromTrip(k){const t=db.trips[curTrip];fromKeys(k).filter(x=>x.p.trip===t.id).forEach(x=>{x.p.trip=null;setStageQuiet(x.p,'ready')});save();go('trip')}
 /* ---------- العفش المتخلف (اللي العربية مشالتهوش) ---------- */
 function leftModal(k){
