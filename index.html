@@ -301,7 +301,14 @@ function closeModal(){$('#modalback').classList.remove('show');modalSave=null}
 
 /* ---------- navigation ---------- */
 let priceDest='',keepDest=false;
-function refreshPrices(){keepDest=true;go('prices')}
+function refreshPrices(focus){const a=document.activeElement,f=focus||(a&&a.classList&&a.classList.contains('pin')?{r:a.dataset.r,c:a.dataset.c}:null);
+  keepDest=true;go('prices');if(f){const el=document.querySelector(`.pin[data-r="${f.r}"][data-c="${f.c}"]`);if(el){el.focus();el.select()}}}
+/* Enter في قائمة الأسعار: ينقل للخانة اللي بعدها، ومن آخر خانة لبند جديد */
+function pKey(e,el){if(e.key!=='Enter'||e.isComposing)return;e.preventDefault();
+  const r=el.dataset.r,c=+el.dataset.c;if(el.value!==el.defaultValue){el.blur()}
+  if(c<4){const n=document.querySelector(`.pin[data-r="${r}"][data-c="${c+1}"]`);if(n){n.focus();n.select()}return}
+  const all=[...document.querySelectorAll('.pin[data-c="0"]')],idx=all.findIndex(x=>x.dataset.r===r);
+  if(idx>-1&&idx<all.length-1){all[idx+1].focus();all[idx+1].select()}else addP()}
 function go(p){
   const prevPage=current;current=p;
   if(p==='prices'){if(!keepDest&&prevPage!=='prices')priceDest='';keepDest=false}
@@ -411,11 +418,11 @@ prices:()=>{
       ${btn('＋ إضافة الوجهة وفتح قائمتها','addDest()')}</div></div>`;
   }
   const rows=db.items.map((x,i)=>normD(x.dest)!==priceDest?'':`<tr>
-    <td><input value="${esc(x.item)}" onchange="setP(${i},'item',this.value)"></td>
-    <td><input type="number" min="0" value="${x.price}" onchange="setP(${i},'price',this.value)"></td>
-    <td><input type="number" min="0" value="${x.pack}" onchange="setP(${i},'pack',this.value)"></td>
-    <td><input type="number" min="0" value="${x.crate}" onchange="setP(${i},'crate',this.value)"></td>
-    <td><input type="number" min="0" value="${x.both}" onchange="setP(${i},'both',this.value)"></td>
+    <td><input class="pin" data-r="${i}" data-c="0" value="${esc(x.item)}" onchange="setP(${i},'item',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
+    <td><input class="pin" data-r="${i}" data-c="1" type="number" min="0" inputmode="decimal" value="${x.price}" onchange="setP(${i},'price',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
+    <td><input class="pin" data-r="${i}" data-c="2" type="number" min="0" inputmode="decimal" value="${x.pack}" onchange="setP(${i},'pack',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
+    <td><input class="pin" data-r="${i}" data-c="3" type="number" min="0" inputmode="decimal" value="${x.crate}" onchange="setP(${i},'crate',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
+    <td><input class="pin" data-r="${i}" data-c="4" type="number" min="0" inputmode="decimal" value="${x.both}" onchange="setP(${i},'both',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
     <td>${btn('حذف',`delP(${i})`,'')}</td></tr>`).join('')||emptyRow(6,'لا توجد بنود للوجهة دي، اضغط "إضافة بند" أو "نسخ من وجهة أخرى"');
   return pageHead('أسعار وجهة: '+esc(priceDest),'لكل بند: سعر الشحن + تكلفة كل حالة (تغليف / تخشيب / الاتنين مع بعض)',
     btn('→ تغيير الوجهة','changeDest()','')+btn('🖨 طباعة القائمة','printPriceList()','soft')+btn('نسخ من وجهة أخرى','copyFromDest()','soft')+btn('＋ إضافة بند','addP()')+btn('حذف الوجهة','delDest()',''))+
@@ -855,8 +862,8 @@ function setP(i,k,v){
   if(k==='item'){v=v.trim();if(!v){toast('اسم البند لا يمكن أن يكون فاضي');refreshPrices();return}
     if(db.items.some((x,j)=>j!==i&&x.item===v&&normD(x.dest)===normD(db.items[i].dest))){toast('البند ده موجود قبل كده في الوجهة دي');refreshPrices();return}db.items[i].item=v}
   else db.items[i][k]=Math.max(+v||0,0);
-  save();refreshPrices()}
-function addP(){let n='بند جديد',c=1;while(db.items.some(x=>x.item===n&&normD(x.dest)===priceDest))n='بند جديد '+(++c);db.items.push({item:n,price:0,pack:0,crate:0,both:0,dest:priceDest});save();refreshPrices()}
+  save()}
+function addP(){let n='بند جديد',c=1;while(db.items.some(x=>x.item===n&&normD(x.dest)===priceDest))n='بند جديد '+(++c);db.items.push({item:n,price:0,pack:0,crate:0,both:0,dest:priceDest});save();refreshPrices({r:db.items.length-1,c:0})}
 function delP(i){db.items.splice(i,1);save();refreshPrices()}
 function pickDest(d){priceDest=normD(d);refreshPrices()}
 function changeDest(){priceDest='';refreshPrices()}
