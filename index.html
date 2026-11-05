@@ -323,10 +323,14 @@ function go(p){
 /* ---------- pages ---------- */
 const pages={
 delivery:()=>{
-  const rows=[];
-  db.customers.forEach((c,ci)=>c.shipments.forEach((x,si)=>rows.push(`<tr><td>${esc(x.no)}</td><td>${esc(c.name)}</td><td>${esc(x.recv)}</td><td>${esc(x.city)}</td><td>${esc(x.date)}</td><td>${x.delivered?pill('تم التسليم','green')+(x.delDate?`<div style="font-size:11px;color:#73849B;margin-top:4px">${esc(x.delDate)}</div>`:''):pill('لم يُسلَّم','orange')}</td><td style="white-space:nowrap">${x.delivered?btn('عرض السند',`showDelivery(${ci},${si})`,'soft')+' '+btn('طباعة',`printDelivery(${ci},${si})`,'soft')+' '+btn('تراجع',`undoDelivered(${ci},${si})`,'')+' '+btn('واتساب',`waShip(${ci},${si})`,'soft'):btn('تم التسليم',`markDelivered(${ci},${si})`)+' '+btn('سند تسليم',`openDelivery(${ci},${si})`,'soft')}</td></tr>`)));
-  return pageHead('استلام السودان','اطبع سند التسليم لأي شحنة وسلّمه للمستلم هناك ليوقّع',``)+
-  `<div class="panel"><div class="tablewrap"><table><thead><tr><th>رقم الشحنة</th><th>المرسل</th><th>المستلم</th><th>الوجهة</th><th>التاريخ</th><th>الحالة</th><th></th></tr></thead><tbody>${rows.join('')||'<tr><td colspan="7" style="text-align:center;color:#73849B;padding:26px">لا توجد شحنات بعد، أنشئ بوليصة من ملف العميل</td></tr>'}</tbody></table></div></div>`;
+  if(dlvTrip==null)return dlvTripsPage();
+  const t=dlvTrip==='none'?null:db.trips.find(x=>x.id===dlvTrip);if(dlvTrip!=='none'&&!t){dlvTrip=null;return dlvTripsPage()}
+  const L=dlvShips(t),done=L.filter(o=>o.s.delivered).length,pcs=L.reduce((a,o)=>a+o.ps.length,0);
+  const rows=L.map(({c,ci,s:x,si,ps})=>`<tr><td>${esc(x.no)}</td><td><b>${esc(c.name)}</b></td><td>${esc(x.recv)}</td><td>${esc(x.city)}</td><td style="white-space:normal;min-width:150px">${esc(itemsSum(ps).join('، '))} <b style="color:#73849B">(${ps.length})</b></td><td>${x.delivered?pill('تم التسليم','green')+(x.delDate?`<div style="font-size:11px;color:#73849B;margin-top:4px">${esc(x.delDate)}</div>`:''):pill('لم يُسلَّم','orange')}</td><td style="white-space:nowrap">${x.delivered?btn('عرض السند',`showDelivery(${ci},${si})`,'soft')+' '+btn('طباعة',`printDelivery(${ci},${si})`,'soft')+' '+btn('تراجع',`undoDelivered(${ci},${si})`,'')+' '+btn('واتساب',`waShip(${ci},${si})`,'soft'):btn('تم التسليم',`markDelivered(${ci},${si})`)+' '+btn('سند تسليم',`openDelivery(${ci},${si})`,'soft')}</td></tr>`).join('');
+  const info=t?`${esc(t.dest||'—')} · ${esc(t.date||'')}${t.car?' · سيارة '+esc(t.car):''}${t.driver?' · السائق: '+esc(t.driver):''}${t.driverPh?' · '+esc(t.driverPh):''}`:'بوالص عفشها مش متحط في أي رحلة';
+  return pageHead(t?'استلام رحلة '+esc(t.no):'بوالص بدون رحلة',info,btn('→ اختيار رحلة تانية','setDlvTrip(null)','')+(L.length?btn('📄 تصدير PDF (كل السندات)','exportDlvPdf()','soft'):''))+
+  `<div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${[['الحالة',t?tripPill(t):'—'],['العملاء',new Set(L.map(o=>o.ci)).size],['البوالص',L.length],['القطع',pcs],['اتسلّم',done+' من '+L.length]].slice(t?0:1).map(x=>`<div class="stat"><div><small>${x[0]}</small><strong style="font-size:${typeof x[1]==='string'&&x[1].includes('<')?'14px':'22px'}">${x[1]}</strong></div></div>`).join('')}</div>
+  <div class="panel"><div class="tablewrap"><table><thead><tr><th>رقم الشحنة</th><th>المرسل</th><th>المستلم</th><th>الوجهة</th><th>العفش في الرحلة</th><th>الحالة</th><th></th></tr></thead><tbody>${rows||emptyRow(7,'مفيش بوالص في الرحلة دي')}</tbody></table></div></div>`;
 },
 warehouses:()=>{
   if(whTab==='SD')return sdWhPage();
@@ -1045,24 +1049,28 @@ function openDelivery(ci,si){
     s.trip=$('#dTrip').value.trim();s.car=$('#dCar').value.trim();s.delAddr=$('#dAddr').value.trim();save();
     showDelivery(ci,si);return false},'معاينة');
 }
-function deliveryHTML(s){
+function deliveryHTML(s,tr){
   const year=(s.date||'').slice(0,4)||new Date().getFullYear();
   const docNo=esc('TS-'+year+'-'+String(s.no).padStart(6,'0'));
-  ensurePieces(s);const pieces=s.pieces;
-  const rows=pieces.map((l,i)=>`<tr><td>${i+1}</td><td>${docNo}-${String(i+1).padStart(2,'0')}</td><td>${esc(pieceLabel(l))}</td><td>${esc(l.status)||'—'}</td><td></td></tr>`).join('')||'<tr><td colspan="5">&nbsp;</td></tr>';
+  ensurePieces(s);if(tr===undefined)tr=curDlvTrip();const T=tr||tripOfShipment(s)||{};
+  const pieces=tr?s.pieces.filter(p=>p.trip===tr.id):s.pieces,allN=s.pieces.length;
+  /* البيان المختصر: كل صنف في سطر بعدده (زي المنفستو) */
+  const gm=new Map();pieces.forEach(p=>{const st=String(p.status||'').trim(),k=(p.part?'g'+p.part.g:'i'+p.item)+'|'+st;let g=gm.get(k);if(!g){g={item:p.item,st,n:0,of:p.part?p.part.of:0};gm.set(k,g)}g.n++});
+  const rows=[...gm.values()].map((g,i)=>`<tr><td>${i+1}</td><td style="text-align:right">${esc(g.item)}${g.of?` <small style="color:#555">(${g.n<g.of?g.n+' من '+qTxt(g.of):qTxt(g.of)})</small>`:''}</td><td><b>${g.n}</b></td><td>${esc(g.st)||'—'}</td><td></td></tr>`).join('')||'<tr><td colspan="5">&nbsp;</td></tr>';
   const dots='<span class="dots"></span>';
   return `<div class="bill">
   <div class="bhead"><img src="${LOGO}" alt=""><div class="bcenter"><b>شركة تساهيل للشحن الدولي</b><span>مصر ⇄ السودان</span></div>
   <div class="btitle">سند تسليم<small>${docNo}</small><small style="font-weight:normal;color:#444">تاريخ الإصدار: ${esc(s.date)}</small></div></div>
   <div class="bgrid">
-    <div>رقم الشحنة: <u>${docNo}</u></div><div>رقم الرحلة: <u>${esc(s.trip)}</u></div>
+    <div>رقم الشحنة: <u>${docNo}</u></div><div>رقم الرحلة: <u>${esc(tr?tr.no:(s.trip||T.no||''))}</u></div>
     <div>اسم المرسل: <u>${esc(s.sender)}</u></div><div>اسم المستلم: <u>${esc(s.recv)}</u></div>
-    <div>الهاتف: <u>${esc(s.senderPh)}</u></div><div>الوجهة: <u>السودان${s.city?' - '+esc(s.city):''}</u></div>
-    <div>عنوان التسليم: <u>${esc(s.delAddr||s.city)}</u></div><div>السيارة: <u>${esc(s.car)}</u></div>
-    <div>اسم السائق: <u>${esc((tripOfShipment(s)||{}).driver||'')}</u></div><div>هاتف السائق: <u>${esc((tripOfShipment(s)||{}).driverPh||'')}</u></div>
+    <div>هاتف المرسل: <u dir="ltr">${esc(s.senderPh||'')}</u></div><div>هاتف المستلم: <u dir="ltr">${esc(s.recvPh||'')}</u></div>
+    <div>الوجهة: <u>السودان${s.city?' - '+esc(s.city):''}</u></div><div>عنوان التسليم: <u>${esc(s.delAddr||s.city)}</u></div>
+    <div>السيارة: <u>${esc(tr?tr.car||'':(s.car||T.car||''))}</u></div><div>اسم السائق: <u>${esc(T.driver||'')}</u></div>
+    <div>هاتف السائق: <u dir="ltr">${esc(T.driverPh||'')}</u></div><div></div>
   </div>
-  <h4 style="text-align:center;margin:12px 0 8px">القطع الموجودة في هذه الرحلة: ${pieces.length} من ${pieces.length} قطعة للشحنة</h4>
-  <table><thead><tr><th style="width:40px">م</th><th>رقم القطعة</th><th>محتوى القطعة</th><th>التغليف</th><th>ملاحظات</th></tr></thead><tbody>${rows}</tbody></table>
+  <h4 style="text-align:center;margin:12px 0 8px">القطع الموجودة في هذه الرحلة: ${pieces.length} من ${allN} قطعة للشحنة</h4>
+  <table style="text-align:center"><thead><tr><th style="width:40px">م</th><th>البيان</th><th style="width:70px">العدد</th><th>التغليف</th><th>ملاحظات</th></tr></thead><tbody>${rows}<tr><th colspan="2">الإجمالي</th><th>${pieces.length}</th><th colspan="2"></th></tr></tbody></table>
   <div class="dlines">
     <div>تاريخ التسليم الفعلي: ${s.delivered&&s.delDate?`<u>${esc(s.delDate)}</u>`:dots} &nbsp; الوقت: ${dots}</div>
     <div>نوع ورقم إثبات هوية المستلم: ${dots}</div>
@@ -1073,6 +1081,30 @@ function deliveryHTML(s){
   <div class="bsign"><div>اسم الموظف:</div><div>التوقيع:</div><div>الختم:</div><div>التاريخ: ${esc(s.date)}</div></div>
   <div class="baddr">العنوان: ${esc(db.settings.addr)}</div></div>`;
 }
+/* ---------- استلام السودان: اختيار الرحلة الأول ---------- */
+let dlvTrip=null;
+function setDlvTrip(v){dlvTrip=v;go('delivery')}
+const curDlvTrip=()=>current==='delivery'&&dlvTrip&&dlvTrip!=='none'?db.trips.find(x=>x.id===dlvTrip)||null:null;
+function dlvShips(t){const out=[];db.customers.forEach((c,ci)=>c.shipments.forEach((s,si)=>{ensurePieces(s);
+  const ps=t?s.pieces.filter(p=>p.trip===t.id):s.pieces.filter(p=>!p.trip);
+  if(t?ps.length:(ps.length===s.pieces.length))out.push({c,ci,s,si,ps:t?ps:s.pieces})}));return out}
+function dlvTripsPage(){
+  const ts=db.trips.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  const card=(t)=>{const L=dlvShips(t),done=L.filter(o=>o.s.delivered).length,pcs=L.reduce((a,o)=>a+o.ps.length,0),cs=new Set(L.map(o=>o.ci)).size,pct=L.length?Math.round(done/L.length*100):0;
+    return `<div class="panel" style="cursor:pointer" onclick="setDlvTrip(${t.id})"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0;font-size:16px">🚚 ${esc(t.no)}</h3>${tripPill(t)}</div>
+    <div style="font-size:20px;font-weight:800;margin:10px 0 4px;color:#12345A">${esc(t.dest||'—')}</div>
+    <div style="font-size:12px;color:#73849B;line-height:1.9">${esc(t.date||'')}${t.driver?' · السائق: '+esc(t.driver):''}<br>${cs} عميل · ${L.length} بوليصة · ${pcs} قطعة</div>
+    <div style="height:7px;border-radius:9px;background:#edf2f8;margin:10px 0 5px;overflow:hidden"><b style="display:block;height:100%;width:${pct}%;background:#15a37f;border-radius:9px"></b></div>
+    <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#73849B"><span>اتسلّم ${done} من ${L.length}</span><span>${pct}%</span></div></div>`};
+  const none=dlvShips(null);
+  return pageHead('استلام السودان','اختار الرحلة الأول عشان تشوف عملاءها وتطبع سندات التسليم','')+
+  (ts.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">${ts.map(card).join('')}${none.length?`<div class="panel" style="cursor:pointer;border-style:dashed" onclick="setDlvTrip('none')"><h3 style="margin:0;font-size:16px">📦 بوالص بدون رحلة</h3><div style="font-size:12px;color:#73849B;margin-top:10px">${none.length} بوليصة عفشها مش متحط في رحلة</div></div>`:''}</div>`:
+   `<div class="notice">لسه مفيش رحلات. اعمل رحلة من صفحة الرحلات الأول.</div>${none.length?btn('📦 عرض البوالص ('+none.length+')',"setDlvTrip('none')",'soft'):''}`)}
+function exportDlvPdf(){const t=curDlvTrip(),L=dlvShips(t);if(!L.length){toast('مفيش سندات');return}
+  const html=L.map(o=>`<div class="pl-break">${deliveryHTML(o.s,t)}</div>`).join('');
+  const old=document.title;document.title='سندات تسليم - '+(t?t.no+(t.dest?' - '+t.dest:''):'بدون رحلة');
+  const back=()=>{document.title=old;removeEventListener('afterprint',back)};addEventListener('afterprint',back);setTimeout(back,60000);
+  toast('من نافذة الطباعة اختار «حفظ كـ PDF» / Save as PDF');setTimeout(()=>printArea(html),350)}
 function markDelivered(ci,si){
   const s=db.customers[ci].shipments[si];
   openModal('تأكيد التسليم - '+s.no,`<div class="formgrid">
@@ -1176,7 +1208,7 @@ function printAllPriceLists(){
 
 /* ---------- init ---------- */
 document.querySelectorAll('.brandmark img').forEach(i=>i.src=LOGO);
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='prices')priceDest='';go(b.dataset.page)}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='prices')priceDest='';if(b.dataset.page==='delivery')dlvTrip=null;go(b.dataset.page)}));
 $('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');setupTopNav();
 $('#closeModal').onclick=closeModal;
 $('#saveModal').onclick=()=>{if(modalSave){const r=modalSave();if(r!==false)closeModal()}};
