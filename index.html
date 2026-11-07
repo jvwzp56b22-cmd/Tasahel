@@ -421,17 +421,18 @@ prices:()=>{
       <input id="newDest" placeholder="اسم وجهة جديدة" onkeydown="if(event.key==='Enter')addDest()" style="padding:10px 12px;border:1px solid #dce5f0;border-radius:9px;min-width:220px;font:inherit">
       ${btn('＋ إضافة الوجهة وفتح قائمتها','addDest()')}</div></div>`;
   }
-  const rows=db.items.map((x,i)=>normD(x.dest)!==priceDest?'':`<tr>
+  let pn=0;const rows=db.items.map((x,i)=>normD(x.dest)!==priceDest?'':`<tr>
+    <td style="color:#73849B;font-weight:700;text-align:center;width:40px">${++pn}</td>
     <td><input class="pin" data-r="${i}" data-c="0" value="${esc(x.item)}" onchange="setP(${i},'item',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
     <td><input class="pin" data-r="${i}" data-c="1" type="number" min="0" inputmode="decimal" value="${x.price}" onchange="setP(${i},'price',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
     <td><input class="pin" data-r="${i}" data-c="2" type="number" min="0" inputmode="decimal" value="${x.pack}" onchange="setP(${i},'pack',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
     <td><input class="pin" data-r="${i}" data-c="3" type="number" min="0" inputmode="decimal" value="${x.crate}" onchange="setP(${i},'crate',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
     <td><input class="pin" data-r="${i}" data-c="4" type="number" min="0" inputmode="decimal" value="${x.both}" onchange="setP(${i},'both',this.value)" onkeydown="pKey(event,this)" onfocus="this.select()" enterkeyhint="next"></td>
-    <td>${btn('حذف',`delP(${i})`,'')}</td></tr>`).join('')||emptyRow(6,'لا توجد بنود للوجهة دي، اضغط "إضافة بند" أو "نسخ من وجهة أخرى"');
+    <td>${btn('حذف',`delP(${i})`,'')}</td></tr>`).join('')||emptyRow(7,'لا توجد بنود للوجهة دي، اضغط "إضافة بند" أو "نسخ من وجهة أخرى"');
   return pageHead('أسعار وجهة: '+esc(priceDest),'لكل بند: سعر الشحن + تكلفة كل حالة (تغليف / تخشيب / الاتنين مع بعض)',
     btn('→ تغيير الوجهة','changeDest()','')+btn('🖨 طباعة القائمة','printPriceList()','soft')+btn('نسخ من وجهة أخرى','copyFromDest()','soft')+btn('＋ إضافة بند','addP()')+btn('حذف الوجهة','delDest()',''))+
   `<div class="notice">الأسعار دي خاصة بوجهة <b>${esc(priceDest)}</b> بس. في البوليصة، أول ما تكتب الوجهة دي بتنزل بنودها وأسعارها تلقائي، والإجمالي = سعر الشحن + تكلفة الحالة اللي اخترتها.</div>
-  <div class="panel"><div class="tablewrap"><table><thead><tr><th>البيان</th><th>سعر الشحن</th><th>تكلفة التغليف</th><th>تكلفة التخشيب</th><th>تخشيب + تغليف</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  <div class="panel"><div class="tablewrap"><table><thead><tr><th style="width:40px;text-align:center">م</th><th>البيان</th><th>سعر الشحن</th><th>تكلفة التغليف</th><th>تكلفة التخشيب</th><th>تخشيب + تغليف</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 },
 customer:()=>{
   const c=db.customers[curCust];if(!c){return pages.customers()}
