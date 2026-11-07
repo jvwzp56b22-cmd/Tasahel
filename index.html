@@ -436,7 +436,7 @@ prices:()=>{
 customer:()=>{
   const c=db.customers[curCust];if(!c){return pages.customers()}
   const t=custTotal(c),p=custPaid(c);
-  const ship=c.shipments.map((s,i)=>`<tr><td>${esc(s.no)}</td><td>${esc(s.date)}</td><td>${esc(s.city)}</td><td>${esc(s.recv)}</td><td>${num(s.total)}</td><td>${btn('عرض / طباعة',`viewBill(${i})`,'soft')} ${btn('✎ تعديل',`editBill(${i})`,'soft')} ${btn('إيصال دفع',`payForm(${i})`,'soft')} ${btn('سند تسليم',`openDelivery(${curCust},${i})`,'soft')} ${btn('حذف',`delBill(${i})`,'')}</td></tr>`).join('')||`<tr><td colspan="6" style="text-align:center;color:#73849B;padding:20px">لا توجد بوالص بعد</td></tr>`;
+  const ship=c.shipments.map((s,i)=>`<tr><td>${esc(s.no)}</td><td>${esc(s.date)}</td><td>${esc(s.city)}</td><td>${esc(s.recv)}</td><td>${num(s.total)}</td><td>${btn('عرض / طباعة',`viewBill(${i})`,'soft')} ${btn('＋ إضافة عفش',`editBill(${i})`,'soft')} ${btn('إيصال دفع',`payForm(${i})`,'soft')} ${btn('سند تسليم',`openDelivery(${curCust},${i})`,'soft')} ${btn('حذف',`delBill(${i})`,'')}</td></tr>`).join('')||`<tr><td colspan="6" style="text-align:center;color:#73849B;padding:20px">لا توجد بوالص بعد</td></tr>`;
   const pays=c.payments.map(x=>`<tr><td>${esc(x.date)}</td><td>${num(x.amount)}</td><td>${esc(x.ship||'')}</td><td>${esc(x.note||'')}</td><td>${btn('إيصال',`payReceipt(${c.payments.indexOf(x)})`,'soft')} ${btn('حذف',`delPay(${c.payments.indexOf(x)})`,'')}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center;color:#73849B;padding:20px">لا توجد مدفوعات بعد</td></tr>`;
   return pageHead(esc(c.name),`كود ${esc(c.code)} · ${esc(c.phone)} · ${esc(c.address)}`,
     btn('→ رجوع','go(\'customers\')','')+btn('＋ بوليصة شحن','newBill()')+btn('إيصال دفع','payForm()','soft'))+
@@ -447,10 +447,10 @@ customer:()=>{
 bill:()=>{
   const c=db.customers[curCust];if(!c)return pages.customers();
   const E=billEdit&&c.shipments[billEdit.si]?c.shipments[billEdit.si]:null;if(!E)billEdit=null;
-  const nR=E?Math.max(E.lines.length+1,2):6;billRowIds=[...Array(nR).keys()];billRowSeq=nR;
+  if(E)return billAddPage(c,E);
+  billRowIds=[0,1,2,3,4,5];billRowSeq=6;
   const rows=billRowIds.map(billRowHTML).join('');
-  if(E)setTimeout(()=>fillBillEdit(E),0);
-  return pageHead(E?'تعديل بوليصة '+esc(E.no):'بوليصة شحن جديدة',esc(c.name)+' · '+esc(c.code)+(E?' · القطع اللي في مخزن أو رحلة مينفعش تتقلل':''),btn('→ رجوع',"billEdit=null;openCustomer(curCust)",''))+
+  return pageHead('بوليصة شحن جديدة',esc(c.name)+' · '+esc(c.code),btn('→ رجوع',"openCustomer(curCust)",''))+
   dl('citiesDL',destsAll())+
   `<div class="panel" style="margin-bottom:16px"><div class="formgrid">
     ${field('الوجهة (اكتب أو اختار) — الأسعار بتنزل تلقائي حسب الوجهة',`<input id="bCity" list="citiesDL" placeholder="الخرطوم" oninput="onDestChange()" onchange="onDestChange()" autocomplete="off"><small id="destHint" style="display:block;margin-top:5px;color:#1d67bd;font-size:11px">اختار الوجهة الأول</small>`)}
@@ -473,7 +473,7 @@ bill:()=>{
     ${field('الملاحظة',`<textarea id="sNote" rows="4" style="width:100%;padding:10px;border:1px solid #dce5f0;border-radius:9px;font:inherit">${esc(db.settings.note)}</textarea>`)}
     ${field('العنوان',`<input id="sAddr" value="${esc(db.settings.addr)}">`)}
   </div></div>
-  ${btn(billEdit?'حفظ التعديلات':'حفظ البوليصة','saveBill()')}`;
+  ${btn('حفظ البوليصة','saveBill()')}`;
 }};
 
 /* ---------- warehouses (Egypt) ---------- */
@@ -1037,6 +1037,7 @@ function recalcAll(){
     const t=q*(p+sc);g+=t;const el=$('#lt'+i);if(el)el.textContent=num(t);
   });
   const gr=$('#grand');if(gr)gr.textContent=num(g);
+  const ga=$('#grandAll');if(ga)ga.textContent=num((+ga.dataset.old||0)+g);
 }
 function readLines(){
   const L=[];
@@ -1048,11 +1049,11 @@ function readLines(){
 }
 function saveBill(){
   const lines=readLines();
-  if(!lines.length){toast('أضف بند واحد على الأقل');return}
+  if(!lines.length){toast(billEdit?'أضف صنف جديد واحد على الأقل':'أضف بند واحد على الأقل');return}
   if(lines.some(l=>!(l.qty>0)||l.qty!==Math.floor(l.qty))){toast('العدد لازم يكون رقم صحيح أكبر من صفر في كل بند');return}
   if(lines.some(l=>l.price<0||l.stateCost<0)){toast('الأسعار لا يمكن أن تكون بالسالب');return}
-  if(!billDest()){toast('حدد الوجهة الأول');const bc=$('#bCity');if(bc)bc.focus();return}
-  if(billEdit){saveBillEdit(lines);return}
+  if(!billEdit&&!billDest()){toast('حدد الوجهة الأول');const bc=$('#bCity');if(bc)bc.focus();return}
+  if(billEdit){saveBillAdd(lines);return}
   lines.forEach(l=>delete l.oi);
   const bn=$('#bNo').value.trim();
   if(!bn){toast('اكتب رقم الشحنة');return}
@@ -1067,49 +1068,35 @@ function saveBill(){
   c.shipments.push(sh);db.seq.bill++;save();toast('تم حفظ البوليصة');
   curCust=curCust;go('customer');viewBill(c.shipments.length-1);
 }
-/* ---------- تعديل البوليصة ---------- */
-function fillBillEdit(E){
-  const set=(id,v)=>{const el=$('#'+id);if(el)el.value=v==null?'':v};
-  set('bCity',E.city);set('bDate',E.date);set('bNo',E.no);set('bSender',E.sender);set('bSenderPh',E.senderPh);set('bRecv',E.recv);set('bRecvPh',E.recvPh);set('bStaff',E.staff);
-  const bn=$('#bNo');if(bn){bn.readOnly=true;bn.style.background='#f3f6fa';bn.title='رقم البوليصة مينفعش يتغير'}
-  const h=$('#destHint');if(h)h.textContent='الوجهة: '+(E.city||'—');
-  E.lines.forEach((l,k)=>{const i=billRowIds[k];const tr=$('#br'+i);if(!tr)return;tr.dataset.oi=k;
-    const sel=$('#itS'+i),inp=$('#it'+i);
-    if([...sel.options].some(o=>o.value===l.item)){sel.value=l.item;inp.style.display='none'}else{sel.value='__m';inp.style.display=''}
-    inp.value=l.item;$('#q'+i).value=l.qty;$('#pr'+i).value=l.price;
-    $('#stS'+i).style.display='none';const st=$('#st'+i);st.style.display='';st.value=l.status||'';$('#sc'+i).value=l.stateCost||0});
-  recalcAll()}
-function saveBillEdit(lines){
+/* ---------- إضافة عفش جديد لبوليصة موجودة (الأصناف القديمة مقفولة) ---------- */
+function billAddPage(c,E){
+  billRowIds=[0,1,2];billRowSeq=3;
+  const old=E.lines.map((l,k)=>`<tr style="background:#f8fafd"><td>${k+1}</td><td><b>${esc(l.item)}</b></td><td>${l.qty}</td><td>${num(l.price)}</td><td>${esc(l.status)||'—'}</td><td>${num(l.stateCost||0)}</td><td><b>${num(l.qty*((+l.price||0)+(+l.stateCost||0)))}</b></td></tr>`).join('');
+  const og=E.lines.reduce((a,l)=>a+l.qty*((+l.price||0)+(+l.stateCost||0)),0);
+  setTimeout(()=>{onDestChange();const f=$('#itS0');if(f)f.focus()},0);
+  return pageHead('إضافة عفش لبوليصة '+esc(E.no),esc(c.name)+' · '+esc(c.code),btn('→ رجوع',"billEdit=null;openCustomer(curCust)",''))+
+  `<input type="hidden" id="bCity" value="${esc(E.city||'')}">
+  <div class="panel" style="margin-bottom:16px"><div style="display:flex;gap:22px;flex-wrap:wrap;font-size:13px;color:#314760">
+    <span>رقم الشحنة: <b>${esc(E.no)}</b></span><span>التاريخ: <b>${esc(E.date||'')}</b></span><span>الوجهة: <b>${esc(E.city||'—')}</b></span><span>المرسل: <b>${esc(E.sender||'')}</b></span><span>المستلم: <b>${esc(E.recv||'')}</b></span></div></div>
+  <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>🔒 العفش الموجود في البوليصة</h3><small>للعرض بس، مش بيتعدل</small></div>
+  <div class="tablewrap"><table><thead><tr><th>م</th><th>البيان</th><th>العدد</th><th>السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th></tr></thead><tbody>${old||emptyRow(7,'—')}</tbody></table></div>
+  <p style="margin:10px 0 0;font-size:13px">إجمالي العفش الموجود: <b>${num(og)} ج</b></p></div>
+  <div class="panel" style="margin-bottom:16px;border:2px solid #cfe3fb"><div class="panelhead"><h3>＋ العفش الجديد</h3><small id="destHint">أسعار ${esc(E.city||'')}</small></div>
+  <div class="tablewrap"><table><thead><tr><th>البيان</th><th>العدد</th><th>التكلفة / السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th><th></th></tr></thead><tbody id="billRows" onkeydown="billKey(event)">${billRowIds.map(billRowHTML).join('')}</tbody></table></div>
+  <div style="margin-top:12px">${btn('＋ إضافة صف (أو اضغط Enter في آخر صف)','addBillRow()','soft')}</div>
+  <p style="font-size:14px;margin:14px 0 0">إجمالي العفش الجديد: <b><span id="grand">0</span> ج</b></p>
+  <p style="font-size:16px;margin:6px 0 0"><b>إجمالي البوليصة بعد الإضافة: <span id="grandAll" data-old="${og}">${num(og)}</span> ج</b></p></div>
+  ${btn('حفظ العفش الجديد','saveBill()')}`}
+function saveBillAdd(lines){
   const c=db.customers[curCust],s=c&&c.shipments[billEdit.si];if(!s){billEdit=null;go('customer');return}
-  if(!$('#bDate').value){toast('اختار تاريخ البوليصة');return}
+  lines=lines.filter(l=>l.qty>0).map(l=>{const o=Object.assign({},l);delete o.oi;return o});
+  if(!lines.length){toast('أضف صنف جديد واحد على الأقل');return}
   ensurePieces(s);
-  /* القطع القديمة → بنود البوليصة القديمة (القطعة المقسّمة = وحدة واحدة) */
-  const units=[];s.pieces.forEach(p=>{if(p.part){const u=units.find(u=>u.g===p.part.g);if(u){u.ps.push(p);return}units.push({g:p.part.g,ps:[p]})}else units.push({ps:[p]})});
-  const byLine=s.lines.map(()=>[]);let ui=0;
-  s.lines.forEach((l,li)=>{for(let k=0;k<Math.max(+l.qty||0,0)&&ui<units.length;k++)byLine[li].push(units[ui++])});
-  while(ui<units.length){const u=units[ui++],li=s.lines.findIndex(l=>l.item===u.ps[0].item);(byLine[li>=0?li:byLine.length-1]||(byLine[0]=byLine[0]||[])).push(u)}
-  const free=u=>u.ps.every(p=>p.wh==null&&!p.trip&&p.sdWh==null&&!p.handed);
-  const used=new Set(),out=[],errs=[];
-  lines.forEach(nl=>{const pool=nl.oi!=null&&byLine[nl.oi]?byLine[nl.oi]:[];if(nl.oi!=null)used.add(nl.oi);
-    let keep=pool.slice();
-    if(nl.qty<keep.length){let need=keep.length-nl.qty;for(let k=keep.length-1;k>=0&&need>0;k--)if(free(keep[k])){keep.splice(k,1);need--}
-      if(need>0){errs.push(`«${nl.item}»: فيه ${keep.length-nl.qty} قطعة في مخزن أو رحلة، طلّعها من المخزن الأول عشان تقلل العدد`);return}}
-    keep.forEach(u=>u.ps.forEach(p=>{p.item=nl.item;p.status=nl.status}));
-    for(let k=keep.length;k<nl.qty;k++)keep.push({ps:[{item:nl.item,status:nl.status,wh:null,trip:null,cost:0}]});
-    out.push(...keep)});
-  byLine.forEach((pool,li)=>{if(used.has(li))return;const bad=pool.filter(u=>!free(u)).length;if(bad)errs.push(`«${s.lines[li].item}» اتمسح بس فيه ${bad} قطعة منه في مخزن أو رحلة، طلّعها من المخزن الأول`)});
-  if(errs.length){openModal('مينفعش نحفظ التعديل',`<div class="notice" style="background:#fff4e5;color:#8a5a00">${errs.map(esc).join('<br>')}</div><p style="font-size:12.5px;color:#56677f">القطع اللي لسه مدخلتش المخزن تقدر تقللها أو تمسحها عادي. واللي في المخزن طلّعها الأول بزرار «إخراج» وبعدين عدّل.</p>`,null);return}
-  const before=s.pieces.length;
-  db.settings.notice=$('#sNotice').value;db.settings.note=$('#sNote').value;db.settings.addr=$('#sAddr').value;
-  Object.assign(s,{date:$('#bDate').value,city:$('#bCity').value.trim(),sender:$('#bSender').value.trim(),senderPh:$('#bSenderPh').value.trim(),recv:$('#bRecv').value.trim(),recvPh:$('#bRecvPh').value.trim(),staff:$('#bStaff').value.trim()});
-  s.lines=lines.map(l=>{const o=Object.assign({},l);delete o.oi;return o});
-  s.pieces=out.flatMap(u=>u.ps);
-  s.gross=s.lines.reduce((a,l)=>a+l.qty*(l.price+l.stateCost),0);s.total=Math.max(s.gross-(+s.discount||0),0);
+  let n=0;lines.forEach(l=>{s.lines.push(l);for(let k=0;k<l.qty;k++){s.pieces.push({item:l.item,status:l.status,wh:null,trip:null,cost:0});n++}});
+  s.gross=s.lines.reduce((a,l)=>a+l.qty*((+l.price||0)+(+l.stateCost||0)),0);s.total=Math.max(s.gross-(+s.discount||0),0);
   applyDiscountToPieces(s);
-  if(s.city&&!destsAll().includes(s.city))db.seq.dests=destsAll().concat([s.city]);
-  const d=s.pieces.length-before,si=billEdit.si;billEdit=null;save();
-  toast('تم حفظ التعديل'+(d>0?' · '+d+' قطعة جديدة نزلت في قائمة الانتظار بالمخازن':d<0?' · اتشال '+(-d)+' قطعة':''));
-  go('customer');viewBill(si)}
+  const si=billEdit.si;billEdit=null;save();
+  toast('تم إضافة '+n+' قطعة للبوليصة · نزلت في قائمة الانتظار بالمخازن');go('customer');viewBill(si)}
 function billHTML(s){
   const rows=[];
   for(let i=0;i<Math.max(6,s.lines.length);i++){const l=s.lines[i];
