@@ -295,7 +295,7 @@ let modalSave=null;
 function openModal(title,body,onSave,saveText='حفظ'){
   $('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;
   $('#saveModal').textContent=saveText;$('#saveModal').style.display=onSave?'':'none';
-  modalSave=onSave;$('.modal').style.width='';$('#saveModal').style.background='';$('#saveModal').style.borderColor='';$('#modalback').classList.add('show');
+  modalSave=onSave;$('.modal').style.width='';$('#closeModal').textContent='إلغاء';$('#saveModal').style.background='';$('#saveModal').style.borderColor='';$('#modalback').classList.add('show');
 }
 function closeModal(){$('#modalback').classList.remove('show');modalSave=null}
 
@@ -380,7 +380,7 @@ trip:()=>{
   const shareRows=custs.map(c=>{const n=ps.filter(x=>x.c===c).length,fee=ps.filter(x=>x.c===c).reduce((a,x)=>a+(+x.p.cost||0),0);
     return `<tr><td>${esc(c.name)}</td><td>${n}</td><td>${num(fee)}</td><td><input type="number" min="0" value="${t.shares[c.code]||''}" placeholder="0" onchange="setShare(${db.customers.indexOf(c)},this.value)" style="max-width:140px"></td></tr>`}).join('')||emptyRow(4,'أضف عفش للرحلة الأول');
   return pageHead(esc(t.no),`${esc(t.dest)} · ${esc(t.date)}${t.car?' · سيارة '+esc(t.car):''}${t.driver?' · السائق: '+esc(t.driver):''}${t.driverPh?' · '+esc(t.driverPh):''}`,
-    btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft')+btn('🖨 منفستو الرحلة','printManifest()','soft')+btn('عفش متخلف','leftModal(\'\')','soft')+btn('🗑 حذف الرحلة','delTrip(curTrip)',''))+
+    btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft')+btn('🖨 منفستو الرحلة','printManifest()','soft')+btn('📝 منفستو فرعي','subList()','soft')+btn('عفش متخلف','leftModal(\'\')','soft')+btn('🗑 حذف الرحلة','delTrip(curTrip)',''))+
   `<div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>العفش في الرحلة (${ps.length} قطعة)</h3>${btn('＋ إضافة عفش للرحلة','pickForTrip()')}</div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>البوليصة</th><th>الوجهة</th><th>القطع</th><th>العدد</th><th>المخزن</th><th>الدفع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>مصاريف الرحلة</h3>${btn('＋ إضافة مصروف','addExp()')}</div><div class="notice" style="margin-bottom:12px">المصاريف العامة (وقود، تحميل...) على الشركة. المصاريف الإضافية / الجمركية هي اللي بتتقسم على العملاء بعد التسليم.</div><div class="tablewrap"><table><thead><tr><th>النوع</th><th>البند</th><th>المبلغ</th><th>التاريخ</th><th></th></tr></thead><tbody>${exp}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>تقسيم الرسوم الإضافية على العملاء</h3><span>${btn('بالتساوي على العملاء','splitExtra(\'eq\')','soft')} ${btn('حسب عدد القطع','splitExtra(\'pc\')','soft')}</span></div>
@@ -436,7 +436,7 @@ prices:()=>{
 customer:()=>{
   const c=db.customers[curCust];if(!c){return pages.customers()}
   const t=custTotal(c),p=custPaid(c);
-  const ship=c.shipments.map((s,i)=>`<tr><td>${esc(s.no)}</td><td>${esc(s.date)}</td><td>${esc(s.city)}</td><td>${esc(s.recv)}</td><td>${num(s.total)}</td><td>${btn('عرض / طباعة',`viewBill(${i})`,'soft')} ${btn('إيصال دفع',`payForm(${i})`,'soft')} ${btn('سند تسليم',`openDelivery(${curCust},${i})`,'soft')} ${btn('حذف',`delBill(${i})`,'')}</td></tr>`).join('')||`<tr><td colspan="6" style="text-align:center;color:#73849B;padding:20px">لا توجد بوالص بعد</td></tr>`;
+  const ship=c.shipments.map((s,i)=>`<tr><td>${esc(s.no)}</td><td>${esc(s.date)}</td><td>${esc(s.city)}</td><td>${esc(s.recv)}</td><td>${num(s.total)}</td><td>${btn('عرض / طباعة',`viewBill(${i})`,'soft')} ${btn('✎ تعديل',`editBill(${i})`,'soft')} ${btn('إيصال دفع',`payForm(${i})`,'soft')} ${btn('سند تسليم',`openDelivery(${curCust},${i})`,'soft')} ${btn('حذف',`delBill(${i})`,'')}</td></tr>`).join('')||`<tr><td colspan="6" style="text-align:center;color:#73849B;padding:20px">لا توجد بوالص بعد</td></tr>`;
   const pays=c.payments.map(x=>`<tr><td>${esc(x.date)}</td><td>${num(x.amount)}</td><td>${esc(x.ship||'')}</td><td>${esc(x.note||'')}</td><td>${btn('إيصال',`payReceipt(${c.payments.indexOf(x)})`,'soft')} ${btn('حذف',`delPay(${c.payments.indexOf(x)})`,'')}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center;color:#73849B;padding:20px">لا توجد مدفوعات بعد</td></tr>`;
   return pageHead(esc(c.name),`كود ${esc(c.code)} · ${esc(c.phone)} · ${esc(c.address)}`,
     btn('→ رجوع','go(\'customers\')','')+btn('＋ بوليصة شحن','newBill()')+btn('إيصال دفع','payForm()','soft'))+
@@ -446,9 +446,11 @@ customer:()=>{
 },
 bill:()=>{
   const c=db.customers[curCust];if(!c)return pages.customers();
-  billRowIds=[0,1,2,3,4,5];billRowSeq=6;
+  const E=billEdit&&c.shipments[billEdit.si]?c.shipments[billEdit.si]:null;if(!E)billEdit=null;
+  const nR=E?Math.max(E.lines.length+1,2):6;billRowIds=[...Array(nR).keys()];billRowSeq=nR;
   const rows=billRowIds.map(billRowHTML).join('');
-  return pageHead('بوليصة شحن جديدة',esc(c.name)+' · '+esc(c.code),btn('→ رجوع',"openCustomer(curCust)",''))+
+  if(E)setTimeout(()=>fillBillEdit(E),0);
+  return pageHead(E?'تعديل بوليصة '+esc(E.no):'بوليصة شحن جديدة',esc(c.name)+' · '+esc(c.code)+(E?' · القطع اللي في مخزن أو رحلة مينفعش تتقلل':''),btn('→ رجوع',"billEdit=null;openCustomer(curCust)",''))+
   dl('citiesDL',destsAll())+
   `<div class="panel" style="margin-bottom:16px"><div class="formgrid">
     ${field('الوجهة (اكتب أو اختار) — الأسعار بتنزل تلقائي حسب الوجهة',`<input id="bCity" list="citiesDL" placeholder="الخرطوم" oninput="onDestChange()" onchange="onDestChange()" autocomplete="off"><small id="destHint" style="display:block;margin-top:5px;color:#1d67bd;font-size:11px">اختار الوجهة الأول</small>`)}
@@ -471,7 +473,7 @@ bill:()=>{
     ${field('الملاحظة',`<textarea id="sNote" rows="4" style="width:100%;padding:10px;border:1px solid #dce5f0;border-radius:9px;font:inherit">${esc(db.settings.note)}</textarea>`)}
     ${field('العنوان',`<input id="sAddr" value="${esc(db.settings.addr)}">`)}
   </div></div>
-  ${btn('حفظ البوليصة','saveBill()')}`;
+  ${btn(billEdit?'حفظ التعديلات':'حفظ البوليصة','saveBill()')}`;
 }};
 
 /* ---------- warehouses (Egypt) ---------- */
@@ -707,6 +709,60 @@ function manifestHTML(t){
   <tr><th colspan="6">الإجمالي</th><th>${ps.length}</th><th colspan="2"></th></tr></tbody></table>
   <div class="bsign"><div>توقيع السائق:</div><div>مسؤول التحميل:</div><div>المستلم بالسودان:</div><div>ختم الشركة:</div></div>
   <div class="baddr">العنوان: ${esc(db.settings.addr||'')}</div></div>`}
+/* ---------- المنفستو الفرعي: نسخة من منفستو الرحلة الأعداد فيها بتتعدل بحرية (منفصلة عن العفش والتقارير) ---------- */
+function subFromTrip(t){
+  const gs=grpBy(tripPieces(t).sort((a,b)=>a.ci-b.ci));
+  return gs.map(arr=>{const x=arr[0],m=new Map();
+    arr.forEach(y=>{const p=y.p,lbl=p.item+(p.status?' ('+p.status+')':''),k=p.part?'g'+p.part.g:'i'+lbl;let e=m.get(k);if(!e){e={n:lbl,q:0};m.set(k,e)}e.q++});
+    const restN=x.s.pieces.filter(p=>p.trip!==t.id).length;
+    return {cust:x.c.name||'',phone:x.c.phone||x.s.senderPh||'',doc:docNoOf(x.s),recv:x.s.recv||'',recvPh:x.s.recvPh||'',city:x.s.city||'',items:[...m.values()],note:restN?'باقي '+restN+' قطعة من البوليصة لم تُشحن':''}})}
+const subT=()=>db.trips[curTrip];
+const subGet=id=>{const t=subT();return t&&(t.subs||[]).find(x=>x.id===id)};
+const subTot=r=>r.items.reduce((a,i)=>a+(+i.q||0),0);
+function subList(){const t=subT();if(!t)return;t.subs=t.subs||[];
+  const rows=t.subs.map((x,i)=>`<tr><td><b>${esc(x.title||'نسخة '+(i+1))}</b></td><td>${esc(x.date||'')}</td><td>${x.rows.length}</td><td><b>${x.rows.reduce((a,r)=>a+subTot(r),0)}</b></td>
+    <td style="white-space:nowrap">${btn('فتح / تعديل',`subEdit(${x.id})`,'soft')} ${btn('📄 PDF',`subPrint(${x.id},true)`,'soft')} ${btn('🖨 طباعة',`subPrint(${x.id})`,'soft')} ${btn('حذف',`subDel(${x.id})`,'')}</td></tr>`).join('')||emptyRow(5,'لسه مفيش نسخ. اضغط «＋ نسخة جديدة»');
+  openModal('المنفستو الفرعي — رحلة '+t.no,`<div class="notice">نسخة من منفستو الرحلة، <b>الأعداد فيها بتتعدل بحرية</b>. أي تعديل هنا مش بيأثر على العفش ولا المخازن ولا لوحة التحكم ولا التقارير، وكل نسخة بتتحفظ لوحدها.</div>
+    <div class="tablewrap"><table><thead><tr><th>النسخة</th><th>التاريخ</th><th>العملاء</th><th>إجمالي القطع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="margin-top:12px">${btn('＋ نسخة جديدة من منفستو الرحلة','subNew()')}</div>`,null);
+  $('.modal').style.width='min(860px,100%)'}
+function subNew(){const t=subT();if(!tripPieces(t).length){toast('أضف عفش للرحلة الأول');return}t.subs=t.subs||[];
+  const x={id:newId(),title:'نسخة '+(t.subs.length+1),date:today(),rows:subFromTrip(t)};t.subs.push(x);save();subEdit(x.id)}
+function subDel(id){const t=subT();t.subs=(t.subs||[]).filter(x=>x.id!==id);save();toast('تم حذف النسخة');subList()}
+function subEdit(id){const x=subGet(id),t=subT();if(!x){subList();return}
+  const inp='padding:6px 8px;border:1px solid #dce5f0;border-radius:8px;font:inherit';
+  const rows=x.rows.map((r,ri)=>`<tr><td>${ri+1}</td><td><b>${esc(r.cust)}</b><div style="font-size:11px;color:#73849B" dir="ltr">${esc(r.phone)}</div></td><td>${esc(r.doc)}</td><td>${esc(r.recv)}</td>
+    <td style="min-width:230px">${r.items.map((it,j)=>`<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><span style="flex:1;font-size:12.5px">${esc(it.n)}</span><input class="sqi" type="number" min="0" inputmode="numeric" value="${it.q}" style="width:70px;${inp}" onfocus="this.select()" oninput="subQ(${id},${ri},${j},this.value)" onkeydown="subKey(event,this)"><a href="javascript:void(0)" onclick="subDelItem(${id},${ri},${j})" title="حذف الصنف" style="color:#c44;text-decoration:none;font-size:15px">✕</a></div>`).join('')||'<span style="color:#73849B;font-size:12px">مفيش أصناف</span>'}</td>
+    <td><b id="sqt${ri}">${subTot(r)}</b></td><td>${esc(r.city)}</td>
+    <td><input value="${esc(r.note)}" placeholder="ملاحظات" style="width:150px;${inp}" oninput="subN(${id},${ri},this.value)"></td>
+    <td>${btn('حذف السطر',`subDelRow(${id},${ri})`,'')}</td></tr>`).join('')||emptyRow(9,'مفيش سطور');
+  openModal('منفستو فرعي — رحلة '+t.no,`<div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+    <div class="field" style="margin:0;flex:1;min-width:180px"><label>اسم النسخة (للتمييز بس، مش بيتطبع)</label><input value="${esc(x.title)}" oninput="subGet(${id}).title=this.value;save()"></div>
+    <div style="font-size:13px">إجمالي القطع: <b id="sqAll" style="font-size:18px">${x.rows.reduce((a,r)=>a+subTot(r),0)}</b></div></div>
+    <div class="notice" style="margin-bottom:10px">التعديلات بتتحفظ لوحدها أول بأول. الورقة بتتطبع باسم «منفستو الرحلة» وبيانات الرحلة.</div>
+    <div class="tablewrap"><table><thead><tr><th>م</th><th>العميل</th><th>البوليصة</th><th>المستلم</th><th>البيان والأعداد</th><th>العدد</th><th>الوجهة</th><th>ملاحظات</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${btn('📄 PDF',`subPrint(${id},true)`,'soft')} ${btn('🖨 طباعة',`subPrint(${id})`,'soft')} ${btn('→ كل النسخ','subList()','')} ${btn('🗑 حذف النسخة',`subDel(${id})`,'')}</div>`,null);
+  $('.modal').style.width='min(1150px,100%)';$('#closeModal').textContent='إغلاق (اتحفظ)'}
+function subQ(id,ri,j,v){const x=subGet(id);if(!x)return;x.rows[ri].items[j].q=Math.max(Math.floor(+v||0),0);save();
+  const e=$('#sqt'+ri);if(e)e.textContent=subTot(x.rows[ri]);const a=$('#sqAll');if(a)a.textContent=x.rows.reduce((s,r)=>s+subTot(r),0)}
+function subN(id,ri,v){const x=subGet(id);if(!x)return;x.rows[ri].note=v;save()}
+function subDelRow(id,ri){const x=subGet(id);x.rows.splice(ri,1);save();subEdit(id)}
+function subDelItem(id,ri,j){const x=subGet(id);x.rows[ri].items.splice(j,1);save();subEdit(id)}
+function subKey(e,el){if(e.key!=='Enter')return;e.preventDefault();const all=[...document.querySelectorAll('.sqi')],i=all.indexOf(el);if(all[i+1]){all[i+1].focus()}else el.blur()}
+function subHTML(t,x){
+  const rows=x.rows.map((r,i)=>{const its=r.items.filter(it=>+it.q>0);
+    return `<tr><td>${i+1}</td><td>${esc(r.cust)}</td><td dir="ltr">${esc(r.phone)}</td><td>${esc(r.doc)}</td><td>${esc(r.recv)}${r.recvPh?'<br><span dir="ltr">'+esc(r.recvPh)+'</span>':''}</td><td style="text-align:right">${esc(its.map(it=>(it.q>1?it.q+' ':'')+it.n).join('، '))}</td><td><b>${subTot(r)}</b></td><td>${esc(r.city)}</td><td style="min-width:90px">${esc(r.note)}</td></tr>`}).join('')||'<tr><td colspan="9">—</td></tr>';
+  const tot=x.rows.reduce((a,r)=>a+subTot(r),0);
+  return `<div class="bill">
+  <div class="bhead"><img src="${LOGO}" alt=""><div class="bcenter"><b>شركة تساهيل للشحن الدولي</b><span>مصر ⇄ السودان</span></div><div class="btitle">منفستو الرحلة<small>No. ${esc(t.no)}</small></div></div>
+  <div class="bgrid"><div>رقم الرحلة: <u>${esc(t.no)}</u></div><div>التاريخ: <u>${esc(t.date||'')}</u></div><div>الوجهة: <u>${esc(t.dest||'')}</u></div><div>رقم السيارة: <u>${esc(t.car||'')}</u></div><div>اسم السائق: <u>${esc(t.driver||'')}</u></div><div>هاتف السائق: <u dir="ltr">${esc(t.driverPh||'')}</u></div><div>عدد العملاء: <u>${x.rows.length}</u></div><div>إجمالي القطع: <u>${tot}</u></div></div>
+  <table style="text-align:center"><thead><tr><th>م</th><th>اسم العميل</th><th>الهاتف</th><th>رقم البوليصة</th><th>المستلم</th><th>البيان</th><th>العدد</th><th>الوجهة</th><th>ملاحظات</th></tr></thead><tbody>${rows}
+  <tr><th colspan="6">الإجمالي</th><th>${tot}</th><th colspan="2"></th></tr></tbody></table>
+  <div class="bsign"><div>توقيع السائق:</div><div>مسؤول التحميل:</div><div>المستلم بالسودان:</div><div>ختم الشركة:</div></div>
+  <div class="baddr">العنوان: ${esc(db.settings.addr||'')}</div></div>`}
+function subPrint(id,pdf){const t=subT(),x=subGet(id);if(!x)return;
+  if(pdf){const old=document.title;document.title='منفستو الرحلة - '+t.no+(t.dest?' - '+t.dest:'');const back=()=>{document.title=old;removeEventListener('afterprint',back)};addEventListener('afterprint',back);setTimeout(back,60000);toast('من نافذة الطباعة اختار «حفظ كـ PDF» / Save as PDF')}
+  setTimeout(()=>printArea(subHTML(t,x)),pdf?350:0)}
 function printManifest(){const t=db.trips[curTrip];if(!t)return;if(!tripPieces(t).length){toast('أضف عفش للرحلة الأول');return}printArea(manifestHTML(t))}
 function rmFromTrip(ci,si,pi){db.customers[ci].shipments[si].pieces[pi].trip=null;setStageQuiet(db.customers[ci].shipments[si].pieces[pi],'ready');save();go('trip')}
 function pickForTrip(){
@@ -891,7 +947,9 @@ function moveLegacy(){
     save();priceDest=d;refreshPrices();toast('تم النقل')},'نقل')}
 
 /* ---------- bill ---------- */
-function newBill(){go('bill')}
+let billEdit=null;
+function newBill(){billEdit=null;go('bill')}
+function editBill(i){billEdit={si:i};go('bill')}
 let billRowIds=[],billRowSeq=0;
 function billRowHTML(i){
   const itemOpts=itemsList().map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
@@ -984,7 +1042,8 @@ function readLines(){
   const L=[];
   billRowIds.forEach(i=>{
     const it=$('#it'+i).value.trim();if(!it)return;
-    L.push({item:it,qty:+$('#q'+i).value||0,price:+$('#pr'+i).value||0,status:$('#st'+i).value.trim(),stateCost:+$('#sc'+i).value||0});
+    const tr=$('#br'+i),oi=tr&&tr.dataset.oi!==undefined&&tr.dataset.oi!==''?+tr.dataset.oi:null;
+    L.push({item:it,qty:+$('#q'+i).value||0,price:+$('#pr'+i).value||0,status:$('#st'+i).value.trim(),stateCost:+$('#sc'+i).value||0,oi});
   });return L;
 }
 function saveBill(){
@@ -993,6 +1052,8 @@ function saveBill(){
   if(lines.some(l=>!(l.qty>0)||l.qty!==Math.floor(l.qty))){toast('العدد لازم يكون رقم صحيح أكبر من صفر في كل بند');return}
   if(lines.some(l=>l.price<0||l.stateCost<0)){toast('الأسعار لا يمكن أن تكون بالسالب');return}
   if(!billDest()){toast('حدد الوجهة الأول');const bc=$('#bCity');if(bc)bc.focus();return}
+  if(billEdit){saveBillEdit(lines);return}
+  lines.forEach(l=>delete l.oi);
   const bn=$('#bNo').value.trim();
   if(!bn){toast('اكتب رقم الشحنة');return}
   if(db.customers.some(c=>c.shipments.some(x=>String(x.no)===bn))){toast('رقم الشحنة مستخدم قبل كده، غيّره');return}
@@ -1006,6 +1067,49 @@ function saveBill(){
   c.shipments.push(sh);db.seq.bill++;save();toast('تم حفظ البوليصة');
   curCust=curCust;go('customer');viewBill(c.shipments.length-1);
 }
+/* ---------- تعديل البوليصة ---------- */
+function fillBillEdit(E){
+  const set=(id,v)=>{const el=$('#'+id);if(el)el.value=v==null?'':v};
+  set('bCity',E.city);set('bDate',E.date);set('bNo',E.no);set('bSender',E.sender);set('bSenderPh',E.senderPh);set('bRecv',E.recv);set('bRecvPh',E.recvPh);set('bStaff',E.staff);
+  const bn=$('#bNo');if(bn){bn.readOnly=true;bn.style.background='#f3f6fa';bn.title='رقم البوليصة مينفعش يتغير'}
+  const h=$('#destHint');if(h)h.textContent='الوجهة: '+(E.city||'—');
+  E.lines.forEach((l,k)=>{const i=billRowIds[k];const tr=$('#br'+i);if(!tr)return;tr.dataset.oi=k;
+    const sel=$('#itS'+i),inp=$('#it'+i);
+    if([...sel.options].some(o=>o.value===l.item)){sel.value=l.item;inp.style.display='none'}else{sel.value='__m';inp.style.display=''}
+    inp.value=l.item;$('#q'+i).value=l.qty;$('#pr'+i).value=l.price;
+    $('#stS'+i).style.display='none';const st=$('#st'+i);st.style.display='';st.value=l.status||'';$('#sc'+i).value=l.stateCost||0});
+  recalcAll()}
+function saveBillEdit(lines){
+  const c=db.customers[curCust],s=c&&c.shipments[billEdit.si];if(!s){billEdit=null;go('customer');return}
+  if(!$('#bDate').value){toast('اختار تاريخ البوليصة');return}
+  ensurePieces(s);
+  /* القطع القديمة → بنود البوليصة القديمة (القطعة المقسّمة = وحدة واحدة) */
+  const units=[];s.pieces.forEach(p=>{if(p.part){const u=units.find(u=>u.g===p.part.g);if(u){u.ps.push(p);return}units.push({g:p.part.g,ps:[p]})}else units.push({ps:[p]})});
+  const byLine=s.lines.map(()=>[]);let ui=0;
+  s.lines.forEach((l,li)=>{for(let k=0;k<Math.max(+l.qty||0,0)&&ui<units.length;k++)byLine[li].push(units[ui++])});
+  while(ui<units.length){const u=units[ui++],li=s.lines.findIndex(l=>l.item===u.ps[0].item);(byLine[li>=0?li:byLine.length-1]||(byLine[0]=byLine[0]||[])).push(u)}
+  const free=u=>u.ps.every(p=>p.wh==null&&!p.trip&&p.sdWh==null&&!p.handed);
+  const used=new Set(),out=[],errs=[];
+  lines.forEach(nl=>{const pool=nl.oi!=null&&byLine[nl.oi]?byLine[nl.oi]:[];if(nl.oi!=null)used.add(nl.oi);
+    let keep=pool.slice();
+    if(nl.qty<keep.length){let need=keep.length-nl.qty;for(let k=keep.length-1;k>=0&&need>0;k--)if(free(keep[k])){keep.splice(k,1);need--}
+      if(need>0){errs.push(`«${nl.item}»: فيه ${keep.length-nl.qty} قطعة في مخزن أو رحلة، طلّعها من المخزن الأول عشان تقلل العدد`);return}}
+    keep.forEach(u=>u.ps.forEach(p=>{p.item=nl.item;p.status=nl.status}));
+    for(let k=keep.length;k<nl.qty;k++)keep.push({ps:[{item:nl.item,status:nl.status,wh:null,trip:null,cost:0}]});
+    out.push(...keep)});
+  byLine.forEach((pool,li)=>{if(used.has(li))return;const bad=pool.filter(u=>!free(u)).length;if(bad)errs.push(`«${s.lines[li].item}» اتمسح بس فيه ${bad} قطعة منه في مخزن أو رحلة، طلّعها من المخزن الأول`)});
+  if(errs.length){openModal('مينفعش نحفظ التعديل',`<div class="notice" style="background:#fff4e5;color:#8a5a00">${errs.map(esc).join('<br>')}</div><p style="font-size:12.5px;color:#56677f">القطع اللي لسه مدخلتش المخزن تقدر تقللها أو تمسحها عادي. واللي في المخزن طلّعها الأول بزرار «إخراج» وبعدين عدّل.</p>`,null);return}
+  const before=s.pieces.length;
+  db.settings.notice=$('#sNotice').value;db.settings.note=$('#sNote').value;db.settings.addr=$('#sAddr').value;
+  Object.assign(s,{date:$('#bDate').value,city:$('#bCity').value.trim(),sender:$('#bSender').value.trim(),senderPh:$('#bSenderPh').value.trim(),recv:$('#bRecv').value.trim(),recvPh:$('#bRecvPh').value.trim(),staff:$('#bStaff').value.trim()});
+  s.lines=lines.map(l=>{const o=Object.assign({},l);delete o.oi;return o});
+  s.pieces=out.flatMap(u=>u.ps);
+  s.gross=s.lines.reduce((a,l)=>a+l.qty*(l.price+l.stateCost),0);s.total=Math.max(s.gross-(+s.discount||0),0);
+  applyDiscountToPieces(s);
+  if(s.city&&!destsAll().includes(s.city))db.seq.dests=destsAll().concat([s.city]);
+  const d=s.pieces.length-before,si=billEdit.si;billEdit=null;save();
+  toast('تم حفظ التعديل'+(d>0?' · '+d+' قطعة جديدة نزلت في قائمة الانتظار بالمخازن':d<0?' · اتشال '+(-d)+' قطعة':''));
+  go('customer');viewBill(si)}
 function billHTML(s){
   const rows=[];
   for(let i=0;i<Math.max(6,s.lines.length);i++){const l=s.lines[i];
