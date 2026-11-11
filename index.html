@@ -193,6 +193,9 @@ function itemsSum(items,withSt){const m=new Map();
     let e=m.get(k);if(!e){e={lbl,q:0,of:o.part?o.part.of:0,u:o.part&&o.part.u>1?o.part.u:0};m.set(k,e)}e.q++});
   return [...m.values()].map(e=>e.u?e.u+' '+e.lbl+' ('+(e.q<e.of?e.q+' من '+qTxt(e.of):'في '+qTxt(e.of))+')':e.of?e.lbl+' ('+(e.q<e.of?e.q+' من '+qTxt(e.of):qTxt(e.of))+')':(e.q>1?e.q+' '+e.lbl:e.lbl))}
 /* وحدات البوليصة: القطعة العادية = وحدة، والمجموعة المقسّمة/المدمجة = وزنها u (مثلاً 8 كراسي في قطعتين = 8 وحدات) */
+/* ملاحظة البند في البوليصة لكل قطعة (عشان تظهر في سند التسليم) */
+function pieceNotes(s){const m=new Map(),lineOf=[];(s.lines||[]).forEach(l=>{for(let k=0;k<(+l.qty||0);k++)lineOf.push(l)});let pos=0;
+  sUnits(s).forEach(u=>{const ls=lineOf.slice(pos,pos+u.w);pos+=u.w;const n=[...new Set(ls.map(l=>String(l.note||'').trim()).filter(Boolean))].join('، ');u.ps.forEach(p=>m.set(p,n))});return m}
 function sUnits(s){const units=[];(s.pieces||[]).forEach(p=>{if(p.part){const u=units.find(u=>u.g===p.part.g);if(u){u.ps.push(p);return}units.push({g:p.part.g,ps:[p],w:p.part.u>1?p.part.u:1})}else units.push({ps:[p],w:1})});return units}
 /* ---------- تقسيم البند لقطع بعد التغليف (غرف نوم / أطفال / أطقم جلوس / ضمياطي...) ---------- */
 const SET_KW=['غرفه نوم','نوم','اطفال','جلوس','انتريه','ضمياطي','دمياطي','صالون'];
@@ -485,7 +488,7 @@ bill:()=>{
     ${field('الاسم (الموظف)',`<input id="bStaff">`)}
   </div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>بنود البوليصة</h3><small>اختار البند من القائمة (وتظهر لك حالاته) أو اختار «كتابة يدوية»</small></div>
-  <div class="tablewrap"><table><thead><tr><th>البيان</th><th>العدد</th><th>التكلفة / السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th><th></th></tr></thead><tbody id="billRows" onkeydown="billKey(event)">${rows}</tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>البيان</th><th>العدد</th><th>التكلفة / السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>ملاحظة</th><th>الإجمالي</th><th></th></tr></thead><tbody id="billRows" onkeydown="billKey(event)">${rows}</tbody></table></div>
   <div style="margin-top:12px">${btn('＋ إضافة صف (أو اضغط Enter في آخر صف)','addBillRow()','soft')}</div>
   <p style="font-size:15px;margin:14px 0 0"><b>الإجمالي: <span id="grand">0</span> ج</b></p>
   <p style="font-size:12px;color:#73849B;margin:6px 0 0">الخصم والمدفوع والمتبقي بتسجلهم في إيصال الدفع.</p>
@@ -1041,6 +1044,7 @@ function billRowHTML(i){
     <td><select id="stS${i}" onchange="pickStatus(${i},this.value)" style="width:100%;min-width:130px;padding:8px;border:1px solid #dce5f0;border-radius:8px;background:#fff;font:inherit;display:none"></select>
       <input id="st${i}" oninput="onStatus(${i})" placeholder="الحالة (اختياري)"></td>
     <td><input id="sc${i}" type="number" min="0" oninput="recalcAll()" style="width:100px"></td>
+    <td><input id="nt${i}" placeholder="ملاحظة (اختياري)" style="min-width:150px"></td>
     <td id="lt${i}">0</td>
     <td>${btn('✕',`delBillRow(${i})`,'')}</td></tr>`;
 }
@@ -1124,7 +1128,7 @@ function readLines(){
   billRowIds.forEach(i=>{
     const it=$('#it'+i).value.trim();if(!it)return;
     const tr=$('#br'+i),oi=tr&&tr.dataset.oi!==undefined&&tr.dataset.oi!==''?+tr.dataset.oi:null;
-    L.push({item:it,qty:+$('#q'+i).value||0,price:+$('#pr'+i).value||0,status:$('#st'+i).value.trim(),stateCost:+$('#sc'+i).value||0,oi});
+    L.push({item:it,qty:+$('#q'+i).value||0,price:+$('#pr'+i).value||0,status:$('#st'+i).value.trim(),stateCost:+$('#sc'+i).value||0,oi});{const nt=$('#nt'+i),v=nt?nt.value.trim():'';if(v)L[L.length-1].note=v}
   });return L;
 }
 function saveBill(){
@@ -1151,7 +1155,7 @@ function saveBill(){
 /* ---------- إضافة عفش جديد لبوليصة موجودة (الأصناف القديمة مقفولة) ---------- */
 function billAddPage(c,E){
   billRowIds=[0,1,2];billRowSeq=3;
-  const old=E.lines.map((l,k)=>`<tr style="background:#f8fafd"><td>${k+1}</td><td><b>${esc(l.item)}</b></td><td>${l.qty}</td><td>${num(l.price)}</td><td>${esc(l.status)||'—'}</td><td>${num(l.stateCost||0)}</td><td><b>${num(l.qty*((+l.price||0)+(+l.stateCost||0)))}</b></td></tr>`).join('');
+  const old=E.lines.map((l,k)=>`<tr style="background:#f8fafd"><td>${k+1}</td><td><b>${esc(l.item)}</b></td><td>${l.qty}</td><td>${num(l.price)}</td><td>${esc(l.status)||'—'}</td><td>${num(l.stateCost||0)}</td><td><b>${num(l.qty*((+l.price||0)+(+l.stateCost||0)))}</b></td><td>${esc(l.note||'')}</td></tr>`).join('');
   const og=E.lines.reduce((a,l)=>a+l.qty*((+l.price||0)+(+l.stateCost||0)),0);
   setTimeout(()=>{onDestChange();const f=$('#itS0');if(f)f.focus()},0);
   return pageHead('إضافة عفش لبوليصة '+esc(E.no),esc(c.name)+' · '+esc(c.code),btn('→ رجوع',"billEdit=null;openCustomer(curCust)",''))+
@@ -1159,10 +1163,10 @@ function billAddPage(c,E){
   <div class="panel" style="margin-bottom:16px"><div style="display:flex;gap:22px;flex-wrap:wrap;font-size:13px;color:#314760">
     <span>رقم الشحنة: <b>${esc(E.no)}</b></span><span>التاريخ: <b>${esc(E.date||'')}</b></span><span>الوجهة: <b>${esc(E.city||'—')}</b></span><span>المرسل: <b>${esc(E.sender||'')}</b></span><span>المستلم: <b>${esc(E.recv||'')}</b></span></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>🔒 العفش الموجود في البوليصة</h3><small>للعرض بس، مش بيتعدل</small></div>
-  <div class="tablewrap"><table><thead><tr><th>م</th><th>البيان</th><th>العدد</th><th>السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th></tr></thead><tbody>${old||emptyRow(7,'—')}</tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>م</th><th>البيان</th><th>العدد</th><th>السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th><th>ملاحظة</th></tr></thead><tbody>${old||emptyRow(8,'—')}</tbody></table></div>
   <p style="margin:10px 0 0;font-size:13px">إجمالي العفش الموجود: <b>${num(og)} ج</b></p></div>
   <div class="panel" style="margin-bottom:16px;border:2px solid #cfe3fb"><div class="panelhead"><h3>＋ العفش الجديد</h3><small id="destHint">أسعار ${esc(E.city||'')}</small></div>
-  <div class="tablewrap"><table><thead><tr><th>البيان</th><th>العدد</th><th>التكلفة / السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th><th></th></tr></thead><tbody id="billRows" onkeydown="billKey(event)">${billRowIds.map(billRowHTML).join('')}</tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>البيان</th><th>العدد</th><th>التكلفة / السعر</th><th>الحالة</th><th>تكلفة الحالة</th><th>ملاحظة</th><th>الإجمالي</th><th></th></tr></thead><tbody id="billRows" onkeydown="billKey(event)">${billRowIds.map(billRowHTML).join('')}</tbody></table></div>
   <div style="margin-top:12px">${btn('＋ إضافة صف (أو اضغط Enter في آخر صف)','addBillRow()','soft')}</div>
   <p style="font-size:14px;margin:14px 0 0">إجمالي العفش الجديد: <b><span id="grand">0</span> ج</b></p>
   <p style="font-size:16px;margin:6px 0 0"><b>إجمالي البوليصة بعد الإضافة: <span id="grandAll" data-old="${og}">${num(og)}</span> ج</b></p></div>
@@ -1183,7 +1187,7 @@ function STAMP(){return `<svg viewBox="0 0 260 118" xmlns="http://www.w3.org/200
 function billHTML(s){
   const rows=[];
   for(let i=0;i<Math.max(6,s.lines.length);i++){const l=s.lines[i];
-    rows.push(l?`<tr><td>${esc(l.item)}</td><td>${l.qty}</td><td>${num(+l.price||0)}</td><td>${esc(l.status)||'—'}</td><td>${num(+l.stateCost||0)}</td><td><b>${num(l.qty*((+l.price||0)+(+l.stateCost||0)))}</b></td></tr>`:'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>');}
+    rows.push(l?`<tr><td>${esc(l.item)}</td><td>${l.qty}</td><td>${num(+l.price||0)}</td><td>${esc(l.status)||'—'}</td><td>${num(+l.stateCost||0)}</td><td><b>${num(l.qty*((+l.price||0)+(+l.stateCost||0)))}</b></td><td style="font-size:11px">${esc(l.note||'')}</td></tr>`:'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>');}
   const shipT=s.lines.reduce((a,l)=>a+l.qty*(+l.price||0),0),packT=s.lines.reduce((a,l)=>a+l.qty*(+l.stateCost||0),0);
   return `<div class="bill">
   <div class="bhead"><img src="${LOGO}" alt=""><div class="bcenter"><b>شركة تساهيل للشحن الدولي</b><span>مصر ⇄ السودان</span></div><div class="btitle">بوليصة شحن<small>No. ${esc(s.no)}</small></div></div>
@@ -1193,7 +1197,7 @@ function billHTML(s){
     <div>المرسل: <u>${esc(s.sender)}</u></div><div>رقم الهاتف: <u>${esc(s.recvPh)}</u></div>
     <div>المستلم: <u>${esc(s.recv)}</u></div><div></div>
   </div>
-  <table style="text-align:center"><thead><tr><th>البيان</th><th>العدد</th><th>سعر الشحن</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th></tr></thead><tbody>${rows.join('')}</tbody></table>
+  <table style="text-align:center"><thead><tr><th>البيان</th><th>العدد</th><th>سعر الشحن</th><th>الحالة</th><th>تكلفة الحالة</th><th>الإجمالي</th><th>ملاحظة</th></tr></thead><tbody>${rows.join('')}</tbody></table>
   <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:12px;margin-top:8px"><span>إجمالي سعر الشحن: <b>${num(shipT)} ج</b></span><span>إجمالي التغليف / التخشيب: <b>${num(packT)} ج</b></span></div>
   <div class="btotal">الإجمالي الأصلي للبوليصة: ${num(shGross(s))} ج</div>
   <p class="bfoot">${esc(db.settings.notice)}</p><p class="bfoot">${esc(db.settings.note)}</p>
@@ -1223,8 +1227,9 @@ function deliveryHTML(s,tr){
   ensurePieces(s);if(tr===undefined)tr=curDlvTrip();const T=tr||tripOfShipment(s)||{};
   const pieces=tr?s.pieces.filter(p=>p.trip===tr.id):s.pieces,allN=s.pieces.length;
   /* البيان المختصر: كل صنف في سطر بعدده (زي المنفستو) */
-  const grpRows=list=>{const gm=new Map();list.forEach(p=>{const st=String(p.status||'').trim(),k=(p.part?'g'+p.part.g:'i'+p.item)+'|'+st;let g=gm.get(k);if(!g){g={item:p.item,st,n:0,of:p.part?p.part.of:0,u:p.part&&p.part.u>1?p.part.u:0};gm.set(k,g)}g.n++});
-    return [...gm.values()].map((g,i)=>`<tr><td>${i+1}</td><td style="text-align:right">${g.u?g.u+' ':''}${esc(g.item)}${g.of?` <small style="color:#555">(${g.n<g.of?g.n+' من '+qTxt(g.of):(g.u?'في ':'')+qTxt(g.of)})</small>`:''}</td><td><b>${g.n}</b></td><td>${esc(g.st)||'—'}</td><td></td></tr>`).join('')};
+  const PN=pieceNotes(s);
+  const grpRows=list=>{const gm=new Map();list.forEach(p=>{const st=String(p.status||'').trim(),nt=PN.get(p)||'',k=(p.part?'g'+p.part.g:'i'+p.item)+'|'+st+'|'+nt;let g=gm.get(k);if(!g){g={item:p.item,st,nt,n:0,of:p.part?p.part.of:0,u:p.part&&p.part.u>1?p.part.u:0};gm.set(k,g)}g.n++});
+    return [...gm.values()].map((g,i)=>`<tr><td>${i+1}</td><td style="text-align:right">${g.u?g.u+' ':''}${esc(g.item)}${g.of?` <small style="color:#555">(${g.n<g.of?g.n+' من '+qTxt(g.of):(g.u?'في ':'')+qTxt(g.of)})</small>`:''}</td><td><b>${g.n}</b></td><td>${esc(g.st)||'—'}</td><td style="font-size:11.5px">${esc(g.nt)}</td></tr>`).join('')};
   const rows=grpRows(pieces)||'<tr><td colspan="5">&nbsp;</td></tr>';
   const leftPs=tr?s.pieces.filter(p=>p.trip!==tr.id&&!p.handed):[];
   const dots='<span class="dots"></span>';
