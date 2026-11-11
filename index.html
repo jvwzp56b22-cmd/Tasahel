@@ -190,8 +190,10 @@ function qTxt(n){n=+n||0;return n===1?'قطعة واحدة':n===2?'قطعتين'
 function itemsSum(items,withSt){const m=new Map();
   (items||[]).forEach(i=>{const o=(i&&typeof i==='object')?i:{item:i},name=String(o.item||'').trim();if(!name)return;
     const lbl=name+(withSt&&o.status?' ('+o.status+')':''),k=o.part?'g:'+o.part.g:'i:'+lbl;
-    let e=m.get(k);if(!e){e={lbl,q:0,of:o.part?o.part.of:0};m.set(k,e)}e.q++});
-  return [...m.values()].map(e=>e.of?e.lbl+' ('+(e.q<e.of?e.q+' من '+qTxt(e.of):qTxt(e.of))+')':(e.q>1?e.q+' '+e.lbl:e.lbl))}
+    let e=m.get(k);if(!e){e={lbl,q:0,of:o.part?o.part.of:0,u:o.part&&o.part.u>1?o.part.u:0};m.set(k,e)}e.q++});
+  return [...m.values()].map(e=>e.u?e.u+' '+e.lbl+' ('+(e.q<e.of?e.q+' من '+qTxt(e.of):'في '+qTxt(e.of))+')':e.of?e.lbl+' ('+(e.q<e.of?e.q+' من '+qTxt(e.of):qTxt(e.of))+')':(e.q>1?e.q+' '+e.lbl:e.lbl))}
+/* وحدات البوليصة: القطعة العادية = وحدة، والمجموعة المقسّمة/المدمجة = وزنها u (مثلاً 8 كراسي في قطعتين = 8 وحدات) */
+function sUnits(s){const units=[];(s.pieces||[]).forEach(p=>{if(p.part){const u=units.find(u=>u.g===p.part.g);if(u){u.ps.push(p);return}units.push({g:p.part.g,ps:[p],w:p.part.u>1?p.part.u:1})}else units.push({ps:[p],w:1})});return units}
 /* ---------- تقسيم البند لقطع بعد التغليف (غرف نوم / أطفال / أطقم جلوس / ضمياطي...) ---------- */
 const SET_KW=['غرفه نوم','نوم','اطفال','جلوس','انتريه','ضمياطي','دمياطي','صالون'];
 function isSetItem(name){const n=normAr(name);return SET_KW.some(k=>n.includes(normAr(k)))}
@@ -202,12 +204,24 @@ function splitPiece(s,pi,N){N=Math.floor(+N||0);const p=s.pieces[pi];if(!p||p.pa
   s.pieces.splice(pi,1,...parts);return true}
 function resizeSplit(s,g,N){N=Math.floor(+N||0);if(N<1)return 'العدد غلط';
   const idx=s.pieces.map((p,i)=>p.part&&p.part.g===g?i:-1).filter(i=>i>=0);if(!idx.length||N===idx.length)return '';
+  if(idx.length&&s.pieces[idx[0]].part.u>1&&N===s.pieces[idx[0]].part.u)return unmergeGroup(s,g);
   const ps=idx.map(i=>s.pieces[i]),loc=p=>[p.wh,p.trip,p.sdWh,!!p.handed].join('|');
   if(new Set(ps.map(loc)).size>1)return 'قطع «'+ps[0].item+'» متفرقة (جزء في رحلة أو مخزن تاني). رجّعها مكان واحد الأول';
   const total=Math.round(ps.reduce((a,p)=>a+(+p.cost||0),0)*100)/100;let arr=ps.slice();
   if(N>arr.length){const last=JSON.stringify(arr[arr.length-1]);while(arr.length<N){const q=JSON.parse(last);delete q._id;arr.push(q)}}else arr=arr.slice(0,N);
-  const costs=splitCost(total,N);arr.forEach((p,i)=>{p.cost=costs[i];if(N===1)delete p.part;else p.part={g,n:i+1,of:N}});
+  const U=ps[0].part.u>1?ps[0].part.u:0,costs=splitCost(total,N);arr.forEach((p,i)=>{p.cost=costs[i];if(N===1&&!U)delete p.part;else p.part=U?{g,n:i+1,of:N,u:U}:{g,n:i+1,of:N}});
   for(let j=idx.length-1;j>=0;j--)s.pieces.splice(idx[j],1);s.pieces.splice(idx[0],0,...arr);return ''}
+/* دمج كذا قطعة من نفس الصنف في عدد قطع تاني بعد التغليف (8 كراسي → قطعتين) أو أكتر */
+function mergeUnits(s,ps,N){N=Math.floor(+N||0);const K=ps.length;if(N<1||K<2||N===K)return false;
+  const g=newId(),total=Math.round(ps.reduce((a,p)=>a+(+p.cost||0),0)*100)/100,at=Math.min(...ps.map(p=>s.pieces.indexOf(p)));
+  let keep=ps.slice(0,Math.min(N,K));if(N>K){const last=JSON.stringify(ps[K-1]);while(keep.length<N){const q=JSON.parse(last);delete q._id;keep.push(q)}}
+  const costs=splitCost(total,N);keep.forEach((p,i)=>{p.part={g,n:i+1,of:N,u:K};p.cost=costs[i]});
+  s.pieces=s.pieces.filter(p=>!ps.includes(p));s.pieces.splice(Math.min(at,s.pieces.length),0,...keep);return true}
+/* رجوع المجموعة المدمجة لقطعها الأصلية (لو كتبت نفس العدد الأصلي) */
+function unmergeGroup(s,g){const idx=s.pieces.map((p,i)=>p.part&&p.part.g===g?i:-1).filter(i=>i>=0),ps=idx.map(i=>s.pieces[i]),K=ps[0].part.u;
+  const total=Math.round(ps.reduce((a,p)=>a+(+p.cost||0),0)*100)/100,costs=splitCost(total,K);let arr=ps.slice(0,K);
+  if(arr.length<K){const last=JSON.stringify(arr[arr.length-1]);while(arr.length<K){const q=JSON.parse(last);delete q._id;arr.push(q)}}
+  arr.forEach((p,i)=>{delete p.part;p.cost=costs[i]});for(let j=idx.length-1;j>=0;j--)s.pieces.splice(idx[j],1);s.pieces.splice(idx[0],0,...arr);return ''}
 const shipKeys=(ci,si)=>db.customers[ci].shipments[si].pieces.map((p,pi)=>ci+'_'+si+'_'+pi).join(',');
 /* بعد التقسيم: القائمة القديمة تتوسع لتشمل كل القطع الجديدة (عشان الواتساب) */
 function expandList(list){const out=[],seen=new Set();list.forEach(x=>{
@@ -215,35 +229,41 @@ function expandList(list){const out=[],seen=new Set();list.forEach(x=>{
   else if(!seen.has(x.p)){seen.add(x.p);out.push(x)}});return out}
 let splitQ=[],splitAfter=null;
 function splitAsk(k,after,allItems){
-  const arr=fromKeys(k),seen=new Set();splitQ=[];
-  arr.forEach(x=>{if(x.p.part){if(seen.has(x.p.part.g))return;seen.add(x.p.part.g);splitQ.push({c:x.c,s:x.s,g:x.p.part.g,item:x.p.item,of:x.p.part.of})}
-    else if(allItems||isSetItem(x.p.item)||arr.length===1)splitQ.push({c:x.c,s:x.s,p:x.p,item:x.p.item})});
+  let arr=fromKeys(k);const seen=new Set();splitQ=[];
+  const loc=p=>[p.wh,p.trip,p.sdWh,!!p.handed].join('|');
+  /* زرار قطعة واحدة: نجيب معاها باقي القطع من نفس الصنف في نفس البوليصة ونفس المكان */
+  if(arr.length===1&&!arr[0].p.part){const x=arr[0];arr=[];x.s.pieces.forEach((p,pi)=>{if(!p.part&&p.item===x.p.item&&loc(p)===loc(x.p))arr.push({c:x.c,ci:x.ci,s:x.s,si:x.si,p,pi})});allItems=true}
+  const sets=new Map();
+  arr.forEach(x=>{if(x.p.part){if(seen.has(x.p.part.g))return;seen.add(x.p.part.g);splitQ.push({c:x.c,s:x.s,g:x.p.part.g,item:x.p.item,of:x.p.part.of,u:x.p.part.u>1?x.p.part.u:0})}
+    else if(allItems||isSetItem(x.p.item)){const key=x.ci+'_'+x.si+'|'+x.p.item+'|'+loc(x.p);let q=sets.get(key);if(!q){q={c:x.c,s:x.s,ps:[],item:x.p.item};sets.set(key,q);splitQ.push(q)}q.ps.push(x.p)}});
   if(!splitQ.length){if(after)after();return}
   splitAfter=after||null;
-  openModal('عدد القطع بعد التغليف',`<div class="notice">اكتب كل بند بقى كام قطعة بعد التغليف، أي رقم إنت عايزه، وسيب الخانة فاضية للبند اللي مش هيتقسم. كل قطعة هتتتبع لوحدها في المخزن والرحلة والمتخلف والاستلام، <b>والسعر في البوليصة مش هيتغير</b>.</div>
-    <div class="tablewrap"><table><thead><tr><th>العميل</th><th>البند</th><th>الحالي</th><th>عدد القطع</th></tr></thead><tbody>${splitQ.map((q,i)=>`<tr><td>${esc(q.c.name)}</td><td>${esc(q.item)}<div style="font-size:10px;color:#73849B">${docNoOf(q.s)}</div></td><td>${q.of?qTxt(q.of):'لم يُحدد'}</td><td><input id="spN${i}" type="number" min="1" step="1" inputmode="numeric" value="${q.of||''}" placeholder="اكتب العدد" style="max-width:120px"></td></tr>`).join('')}</tbody></table></div>
+  const cur=q=>q.g?qTxt(q.of)+(q.u?` <span style="color:#73849B">(فيها ${q.u} ${esc(q.item)})</span>`:''):(q.ps.length>1?q.ps.length+' قطعة':'قطعة واحدة');
+  openModal('عدد القطع بعد التغليف',`<div class="notice">اكتب كل بند بقى كام قطعة بعد التغليف، <b>أي عدد أكتر أو أقل</b> (غرفة نوم ممكن تبقى 6 قطع، و8 كراسي ممكن يبقوا قطعتين). سيب الخانة فاضية للبند اللي متغيرش. كل قطعة بتتتبع لوحدها في المخزن والرحلة والاستلام، <b>والسعر في البوليصة مش هيتغير</b>.</div>
+    <div class="tablewrap"><table><thead><tr><th>العميل</th><th>البند</th><th>الحالي</th><th>عدد القطع بعد التغليف</th></tr></thead><tbody>${splitQ.map((q,i)=>`<tr><td>${esc(q.c.name)}</td><td>${esc(q.item)}<div style="font-size:10px;color:#73849B">${docNoOf(q.s)}</div></td><td>${cur(q)}</td><td><input id="spN${i}" type="number" min="1" step="1" inputmode="numeric" value="${q.g?q.of:''}" placeholder="اكتب العدد" style="max-width:120px"></td></tr>`).join('')}</tbody></table></div>
     ${after?`<div style="margin-top:10px"><a href="javascript:void(0)" onclick="splitSkip()" style="font-size:12px;color:#73849B">تخطي دلوقتي ←</a></div>`:''}`,()=>{
     let n=0,err='';
     splitQ.forEach((q,i)=>{const v=Math.floor(+$('#spN'+i).value||0);if(!v)return;
       if(q.g){if(v!==q.of){const e=resizeSplit(q.s,q.g,v);if(e)err=e;else n++}}
-      else if(v>=2){const pi=q.s.pieces.indexOf(q.p);if(pi>=0&&splitPiece(q.s,pi,v))n++}});
+      else if(q.ps.length===1){if(v>=2){const pi=q.s.pieces.indexOf(q.ps[0]);if(pi>=0&&splitPiece(q.s,pi,v))n++}}
+      else if(v!==q.ps.length){if(mergeUnits(q.s,q.ps,v))n++}});
     if(n)save();
     if(err){toast(err);go(current);return false}
     if(n)toast('تم تحديد عدد القطع لـ '+n+' بند');
     go(current);const a=splitAfter;splitAfter=null;if(a)setTimeout(a,30);return true},'حفظ');
-  $('.modal').style.width='min(640px,100%)'}
+  $('.modal').style.width='min(680px,100%)';setTimeout(()=>{const f=$('#spN0');if(f)f.focus()},50)}
 /* فحص وتصليح تلقائي بعد الدخول: لو محاولة حفظ فشلت في نص التقسيم وسابت ترقيم غلط (مثلاً 3 قطع مكتوب عليها 1/6) */
 function fixSplits(){let n=0;
   db.customers.forEach(c=>c.shipments.forEach(s=>{if(!s.pieces)return;const g=new Map();
     s.pieces.forEach(p=>{if(p.part&&p.part.g!=null){if(!g.has(p.part.g))g.set(p.part.g,[]);g.get(p.part.g).push(p)}});
-    let ch=false;g.forEach(arr=>{const N=arr.length;arr.forEach((p,i)=>{if(N===1){delete p.part;ch=true}else if(p.part.n!==i+1||p.part.of!==N){p.part={g:p.part.g,n:i+1,of:N};ch=true}})});
+    let ch=false;g.forEach(arr=>{const N=arr.length,U=arr[0].part.u>1?arr[0].part.u:0;arr.forEach((p,i)=>{if(N===1&&!U){delete p.part;ch=true}else if(p.part.n!==i+1||p.part.of!==N||(p.part.u||0)!==(U||0)&&U){p.part=U?{g:p.part.g,n:i+1,of:N,u:U}:{g:p.part.g,n:i+1,of:N};ch=true}})});
     const sum=s.pieces.reduce((a,p)=>a+(+p.cost||0),0),net=(+s.total||0);
     if(g.size&&net&&Math.abs(sum-net)>1)ch=true;
     if(ch){if(s.lines&&s.lines.length)applyDiscountToPieces(s);n++}}));
   if(n){save();toast('🔧 تم تصليح ترقيم القطع في '+n+' بوليصة تلقائياً');if(current==='warehouse'||current==='trip'||current==='home')go(current)}
   return n}
 function splitSkip(){closeModal();const a=splitAfter;splitAfter=null;if(a)a()}
-function pieceLabel(p){return p?(p.part?p.item+' — قطعة '+p.part.n+'/'+p.part.of:p.item):''}
+function pieceLabel(p){return p?(p.part?(p.part.u>1?p.part.u+' ':'')+p.item+' — قطعة '+p.part.n+'/'+p.part.of:p.item):''}
 function waOpen(c,nos,status,items){
   const ph=waPhone(c.phone);if(!ph){toast('مفيش رقم تليفون للعميل '+c.name);return}
   window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(waText(c,nos,status,items)),'_blank')}
@@ -675,14 +695,16 @@ function editTrip(){const t=db.trips[curTrip];openModal('تعديل الرحلة
 function setTripStatus(v){const t=db.trips[curTrip];t.status=v;if(v==='delivered'&&!t.deliveredAt)t.deliveredAt=today();
   let msg='تم تغيير حالة الرحلة';
   if(v==='arrived'||v==='delivered'){const r=autoSdStore(t);
-    msg=r.w?(r.n?'نزل '+r.n+' قطعة تلقائي في '+r.w.name:'العفش متخزن بالفعل في مخازن السودان'):'مفيش مخزن في السودان باسم «'+(t.dest||'—')+'» — العفش نزل في قائمة الانتظار'}
+    msg=!r.total?'العفش متخزن بالفعل في مخازن السودان':(r.n?'نزل '+r.n+' قطعة حسب وجهة كل عميل: '+r.by.map(x=>x[0]+' '+x[1]).join('، '):'')+(r.miss.length?(r.n?' · ':'')+'مفيش مخزن لـ '+r.miss.map(x=>'«'+x[0]+'» ('+x[1]+' قطعة)').join('، ')+' — مستنية في قائمة الانتظار':'')}
   save();toast(msg);go('trip');if(WA_TRIP[v])waPrompt(tripPieces(t),WA_TRIP[v])}
 /* مطابقة اسم الوجهة مع اسم المخزن مع تجاهل فروق الكتابة (أم درمان = امدرمان = مخزن امدرمان) */
 function normAr(s){return String(s||'').replace(/[ً-ْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/مخازن|مخزن/g,' ').replace(/(^|\s)ال/g,'$1').replace(/[\s\-_.,،()]/g,'')}
 function findSdWh(dest){const d=normAr(dest);if(!d)return null;const sds=db.warehouses.filter(w=>w.country==='SD');
   return sds.find(w=>normAr(w.name)===d)||sds.find(w=>{const n=normAr(w.name);return n.length>=3&&d.length>=3&&(n.includes(d)||d.includes(n))})||null}
-function autoSdStore(t){const w=findSdWh(t.dest),ps=tripPieces(t).filter(x=>!x.p.handed&&x.p.sdWh==null);
-  if(w)ps.forEach(x=>x.p.sdWh=w.id);return {w,n:w?ps.length:0}}
+/* كل عميل عفشه بينزل في مخزن الوجهة المكتوبة في بوليصته (مش وجهة الرحلة). لو مفيش مخزن بالاسم ده يستنى في الانتظار */
+function autoSdStore(t){const ps=tripPieces(t).filter(x=>!x.p.handed&&x.p.sdWh==null),by=new Map(),miss=new Map();
+  ps.forEach(x=>{const w=findSdWh(x.s.city);if(w){x.p.sdWh=w.id;by.set(w.name,(by.get(w.name)||0)+1)}else{const k=(x.s.city||'').trim()||'بدون وجهة';miss.set(k,(miss.get(k)||0)+1)}});
+  return {n:[...by.values()].reduce((a,b)=>a+b,0),by:[...by],miss:[...miss],total:ps.length}}
 /* ---------- حذف الرحلة ---------- */
 function delTrip(i){const t=db.trips[i];if(!t)return;
   const ps=tripPieces(t),gone=ps.filter(x=>x.p.handed),sd=ps.filter(x=>!x.p.handed&&x.p.sdWh!=null),back=ps.filter(x=>!x.p.handed&&x.p.sdWh==null);
@@ -723,7 +745,7 @@ function manifestHTML(t){
 function subFromTrip(t){
   const gs=grpBy(tripPieces(t).sort((a,b)=>a.ci-b.ci));
   return gs.map(arr=>{const x=arr[0],m=new Map();
-    arr.forEach(y=>{const p=y.p,lbl=p.item+(p.status?' ('+p.status+')':''),k=p.part?'g'+p.part.g:'i'+lbl;let e=m.get(k);if(!e){e={n:lbl,q:0};m.set(k,e)}e.q++});
+    arr.forEach(y=>{const p=y.p,lbl=(p.part&&p.part.u>1?p.part.u+' ':'')+p.item+(p.status?' ('+p.status+')':''),k=p.part?'g'+p.part.g:'i'+lbl;let e=m.get(k);if(!e){e={n:lbl,q:0};m.set(k,e)}e.q++});
     const restN=x.s.pieces.filter(p=>p.trip!==t.id).length;
     return {cust:x.c.name||'',phone:x.c.phone||x.s.senderPh||'',doc:docNoOf(x.s),recv:x.s.recv||'',recvPh:x.s.recvPh||'',city:x.s.city||'',items:[...m.values()],note:restN?'باقي '+restN+' قطعة من البوليصة لم تُشحن':''}})}
 const subT=()=>db.trips[curTrip];
@@ -807,11 +829,11 @@ function setShare(ci,v){const t=db.trips[curTrip],c=db.customers[ci];if(!c)retur
 const cusPaid=(t,c)=>((t.cpay||{})[c.code]||[]).reduce((a,x)=>a+(+x.amount||0),0);
 function tripPackCosts(t){let ship=0,pack=0;const by=new Map(),seen=new Set();
   tripPieces(t).forEach(x=>{const s=x.s;if(seen.has(s))return;seen.add(s);
-    const units=[];s.pieces.forEach(p=>{if(p.part){const u=units.find(u=>u.g===p.part.g);if(u){u.ps.push(p);return}units.push({g:p.part.g,ps:[p]})}else units.push({ps:[p]})});
-    const lineOf=[];s.lines.forEach(l=>{for(let k=0;k<(+l.qty||0);k++)lineOf.push(l)});
-    units.forEach((u,i)=>{const l=lineOf[i];if(!l)return;const inTrip=u.ps.filter(p=>p.trip===t.id).length;if(!inTrip)return;const f=inTrip/u.ps.length;
-      ship+=(+l.price||0)*f;const pc=(+l.stateCost||0)*f;pack+=pc;
-      if(pc){const k=String(l.status||'').trim()||'أخرى',e=by.get(k)||[0,0];e[0]+=pc;e[1]+=inTrip;by.set(k,e)}})});
+    const lineOf=[];s.lines.forEach(l=>{for(let k=0;k<(+l.qty||0);k++)lineOf.push(l)});let pos=0;
+    sUnits(s).forEach(u=>{const ls=lineOf.slice(pos,pos+u.w);pos+=u.w;const inTrip=u.ps.filter(p=>p.trip===t.id).length;if(!inTrip||!ls.length)return;const f=inTrip/u.ps.length;
+      ls.forEach(l=>{ship+=(+l.price||0)*f;const pc=(+l.stateCost||0)*f;pack+=pc;
+        if(pc){const k=String(l.status||'').trim()||'أخرى',e=by.get(k)||[0,0];e[0]+=pc;by.set(k,e)}});
+      const pc0=ls.some(l=>+l.stateCost);if(pc0){const k=String(ls[0].status||'').trim()||'أخرى',e=by.get(k)||[0,0];e[1]+=inTrip;by.set(k,e)}})});
   return {ship:Math.round(ship),pack:Math.round(pack),by:[...by].map(([k,v])=>[k,Math.round(v[0]),v[1]])}}
 /* رسوم جمركية لكل قطعة من عفش العميل في الرحلة */
 function cusUnits(t,c){const out=[];c.shipments.forEach(s=>{ensurePieces(s);const units=[];
@@ -1201,8 +1223,10 @@ function deliveryHTML(s,tr){
   ensurePieces(s);if(tr===undefined)tr=curDlvTrip();const T=tr||tripOfShipment(s)||{};
   const pieces=tr?s.pieces.filter(p=>p.trip===tr.id):s.pieces,allN=s.pieces.length;
   /* البيان المختصر: كل صنف في سطر بعدده (زي المنفستو) */
-  const gm=new Map();pieces.forEach(p=>{const st=String(p.status||'').trim(),k=(p.part?'g'+p.part.g:'i'+p.item)+'|'+st;let g=gm.get(k);if(!g){g={item:p.item,st,n:0,of:p.part?p.part.of:0};gm.set(k,g)}g.n++});
-  const rows=[...gm.values()].map((g,i)=>`<tr><td>${i+1}</td><td style="text-align:right">${esc(g.item)}${g.of?` <small style="color:#555">(${g.n<g.of?g.n+' من '+qTxt(g.of):qTxt(g.of)})</small>`:''}</td><td><b>${g.n}</b></td><td>${esc(g.st)||'—'}</td><td></td></tr>`).join('')||'<tr><td colspan="5">&nbsp;</td></tr>';
+  const grpRows=list=>{const gm=new Map();list.forEach(p=>{const st=String(p.status||'').trim(),k=(p.part?'g'+p.part.g:'i'+p.item)+'|'+st;let g=gm.get(k);if(!g){g={item:p.item,st,n:0,of:p.part?p.part.of:0,u:p.part&&p.part.u>1?p.part.u:0};gm.set(k,g)}g.n++});
+    return [...gm.values()].map((g,i)=>`<tr><td>${i+1}</td><td style="text-align:right">${g.u?g.u+' ':''}${esc(g.item)}${g.of?` <small style="color:#555">(${g.n<g.of?g.n+' من '+qTxt(g.of):(g.u?'في ':'')+qTxt(g.of)})</small>`:''}</td><td><b>${g.n}</b></td><td>${esc(g.st)||'—'}</td><td></td></tr>`).join('')};
+  const rows=grpRows(pieces)||'<tr><td colspan="5">&nbsp;</td></tr>';
+  const leftPs=tr?s.pieces.filter(p=>p.trip!==tr.id&&!p.handed):[];
   const dots='<span class="dots"></span>';
   return `<div class="bill">
   <div class="bhead"><img src="${LOGO}" alt=""><div class="bcenter"><b>شركة تساهيل للشحن الدولي</b><span>مصر ⇄ السودان</span></div>
@@ -1217,6 +1241,8 @@ function deliveryHTML(s,tr){
   </div>
   <h4 style="text-align:center;margin:12px 0 8px">القطع الموجودة في هذه الرحلة: ${pieces.length} من ${allN} قطعة للشحنة</h4>
   <table style="text-align:center"><thead><tr><th style="width:40px">م</th><th>البيان</th><th style="width:70px">العدد</th><th>التغليف</th><th>ملاحظات</th></tr></thead><tbody>${rows}<tr><th colspan="2">الإجمالي</th><th>${pieces.length}</th><th colspan="2"></th></tr></tbody></table>
+  ${leftPs.length?`<h4 style="text-align:center;margin:12px 0 6px;color:#a8323c">عفش متخلف لم يصل في هذه الرحلة: ${leftPs.length} قطعة</h4>
+  <table style="text-align:center"><thead><tr><th style="width:40px">م</th><th>البيان</th><th style="width:70px">العدد</th><th>التغليف</th><th>ملاحظات</th></tr></thead><tbody>${grpRows(leftPs)}</tbody></table>`:''}
   ${(()=>{const c=db.customers.find(c=>c.shipments.includes(s));if(!c)return '';const rs=Math.max((+s.total||0)-shPaid(c,s),0),TT=tr||tripOfShipment(s);
     const sh=TT&&TT.shares?(+TT.shares[c.code]||0):0,cr=TT?Math.max(sh-cusPaid(TT,c),0):0;
     return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;font-size:13px"><div style="border:1.5px solid #12345A;border-radius:8px;padding:8px 10px">المتبقي عليه من رسوم الشحن: <b style="font-size:15px">${num(rs)} ج</b></div><div style="border:1.5px solid #c46d10;border-radius:8px;padding:8px 10px">المتبقي عليه من الرسوم الجمركية: <b style="font-size:15px">${num(cr)} ج.س</b>${sh?`<div style="font-size:11px;color:#555">من إجمالي ${num(sh)} ج.س</div>`:''}</div></div>`})()}
@@ -1281,9 +1307,8 @@ function applyDiscountToPieces(s){
   const base=exp.map(l=>(+l.price||0)+(+l.stateCost||0)),sum=base.reduce((a,b)=>a+b,0),disc=Math.min(Math.max(+s.discount||0,0),sum);
   let left=disc;
   /* القطع المقسّمة بتتحسب كبند واحد في البوليصة، وتكلفته بتتوزع على قطعه */
-  const units=[];s.pieces.forEach(p=>{if(p.part){const u=units.find(u=>u.g===p.part.g);if(u){u.ps.push(p);return}units.push({g:p.part.g,ps:[p]})}else units.push({ps:[p]})});
-  units.forEach((u,i)=>{if(i>=base.length)return;const b=base[i];let d=0;
-    if(disc&&sum){d=i===base.length-1?left:Math.round(disc*b/sum*100)/100;left=Math.round((left-d)*100)/100}
+  let pos=0;sUnits(s).forEach(u=>{if(pos>=base.length)return;let b=0,d=0;
+    for(let k=0;k<u.w&&pos<base.length;k++,pos++){const bi=base[pos];b+=bi;if(disc&&sum){const di=pos===base.length-1?left:Math.round(disc*bi/sum*100)/100;left=Math.round((left-di)*100)/100;d+=di}}
     splitCost(Math.round((b-d)*100)/100,u.ps.length).forEach((c,j)=>u.ps[j].cost=c)});
 }
 function splitCost(total,n){const each=Math.floor(total/n*100)/100,out=Array(n).fill(each);out[0]=Math.round((total-each*(n-1))*100)/100;return out}
