@@ -132,6 +132,7 @@ td input{padding:8px;border:1px solid #dce5f0;border-radius:8px;background:#fff;
 <button data-page="delivery"><span class="ico">☑</span>استلام السودان</button>
 <button data-page="trips"><span class="ico">🚚</span>الرحلات</button>
 <button data-page="customs"><span class="ico">⚖</span>الرسوم الإضافية</button>
+<button data-page="accounts"><span class="ico">🧮</span>المنصرفات والحسابات</button>
 <button data-page="reports"><span class="ico">▥</span>التقارير</button>
 <div class="group">قريباً</div>
 <button data-page="staff"><span class="ico">♧</span>الموظفون والصلاحيات</button></nav><div class="sidefoot">نسخة العمل الأولى<br>© TASAHIL International Shipping</div></aside><main class="main"><header class="topbar"><div class="topright"><button class="hamb" id="menuBtn">☰</button><span class="crumb">نظام إدارة الشركة / <b id="crumb">الرئيسية</b></span></div><div class="user"><div class="avatar">م</div><div><b>مدير النظام</b><small>تشغيل</small></div></div></header><section class="content" id="content"></section></main></div><div class="modalback" id="modalback"><div class="modal"><h3 id="modalTitle">إضافة</h3><div id="modalBody"></div><div class="modalfoot"><button class="btn primary" id="saveModal">حفظ تجريبي</button><button class="btn" id="closeModal">إلغاء</button></div></div></div><div class="toast" id="toast"></div>
@@ -288,7 +289,7 @@ function waShip(ci,si){const c=db.customers[ci],s=c.shipments[si];ensurePieces(s
 function saveInq(){db.settings.inq1=$('#sInq1').value.trim();db.settings.inq2=$('#sInq2').value.trim();save();toast('تم حفظ أرقام الاستفسار')}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2300)}
 
-const names={home:'الرئيسية',customers:'العملاء',prices:'قائمة الأسعار',customer:'ملف العميل',bill:'بوليصة شحن',warehouses:'المخازن',warehouse:'المخزن',trip:'الرحلة',trips:'الرحلات',customs:'الرسوم والمصاريف',delivery:'استلام السودان',reports:'التقارير',staff:'الموظفون والصلاحيات'};
+const names={home:'الرئيسية',customers:'العملاء',prices:'قائمة الأسعار',customer:'ملف العميل',bill:'بوليصة شحن',warehouses:'المخازن',warehouse:'المخزن',trip:'الرحلة',trips:'الرحلات',customs:'الرسوم والمصاريف',delivery:'استلام السودان',reports:'التقارير',accounts:'المنصرفات والحسابات',staff:'الموظفون والصلاحيات'};
 let current='customers',curCust=null,lastBill=null,curWh=null,curTrip=null;
 
 /* ---------- helpers ---------- */
@@ -399,14 +400,14 @@ trip:()=>{
   const ps=tripPieces(t).sort((a,b)=>a.ci-b.ci);
   const rows=grpBy(ps).map(arr=>{const x=arr[0],k=pKeys(arr),rest=custTotal(x.c)-custPaid(x.c),whs=[...new Set(arr.map(y=>whName(y.p.wh)))];
     return `<tr><td><a href="javascript:void(0)" onclick="leftModal('${k}')" style="color:#1d67bd;font-weight:bold;text-decoration:none;border-bottom:1px dashed #1d67bd">${esc(x.c.name)}</a></td><td>${docNoOf(x.s)}</td><td>${esc(x.s.city||'—')}</td><td style="white-space:normal;min-width:140px">${esc(itemsSum(arr.map(y=>y.p)).join('، '))}</td><td><b>${arr.length}</b></td><td>${esc(whs.join('، '))}</td><td>${rest>0?pill('عليه متبقي '+num(rest),'orange'):pill('خالص','green')}</td><td style="white-space:nowrap">${btn('عفش متخلف',`leftModal('${k}')`,'soft')} ${t.status==='open'?btn('إزالة',`rmGroupFromTrip('${k}')`,''):''}</td></tr>`}).join('')||emptyRow(8,'لا يوجد عفش في الرحلة، اضغط "إضافة عفش للرحلة"');
-  const exp=t.expenses.map((e,i)=>`<tr><td>${e.kind==='customs'?pill('إضافية / جمركية','orange'):pill('عامة','')}</td><td>${esc(e.name)}</td><td><b>${num(e.amount)}</b> ${e.kind==='customs'?'<span style="color:#c46d10;font-size:11px">ج.س</span>':'<span style="color:#73849B;font-size:11px">ج</span>'}</td><td>${esc(e.date)}</td><td>${btn('حذف',`delExp(${i})`,'')}</td></tr>`).join('')||emptyRow(5,'لا توجد مصاريف مسجلة');
+  const exp=t.expenses.map((e,i)=>e.kind!=='customs'?'':`<tr><td>${esc(e.name)}</td><td><b>${num(e.amount)}</b> <span style="color:#c46d10;font-size:11px">ج.س</span></td><td>${esc(e.date)}</td><td>${btn('حذف',`delExp(${i})`,'')}</td></tr>`).join('')||emptyRow(4,'لا توجد منصرفات جمركية مسجلة');
   const custs=tripCustomers(t);
   const shareRows=custs.map(c=>{const n=ps.filter(x=>x.c===c).length,fee=ps.filter(x=>x.c===c).reduce((a,x)=>a+(+x.p.cost||0),0),ci=db.customers.indexOf(c),sh=+t.shares[c.code]||0,pd=cusPaid(t,c),rs=sh-pd;
     return `<tr><td>${esc(c.name)}</td><td>${n}</td><td>${num(fee)} <span style="font-size:10.5px;color:#73849B">ج</span></td><td style="white-space:nowrap"><b>${num(sh)}</b> <span style="font-size:11px;color:#c46d10">ج.س</span> ${btn(sh?'✎ تعديل رسوم القطع':'＋ تحديد رسوم القطع',`cusDetModal(${ci})`,'soft')}</td><td>${num(pd)} <span style="font-size:10.5px;color:#73849B">ج.س</span></td><td>${sh?(rs>0?pill('متبقي '+num(rs)+' ج.س','orange'):pill('خالص','green')):'—'}</td><td style="white-space:nowrap">${sh?btn('سداد',`cusPayModal(${ci})`,'soft')+' '+btn('واتساب',`cusWa(${ci})`,'soft'):''}</td></tr>`}).join('')||emptyRow(7,'أضف عفش للرحلة الأول');
   return pageHead(esc(t.no),`${esc(t.dest)} · ${esc(t.date)}${t.car?' · سيارة '+esc(t.car):''}${t.driver?' · السائق: '+esc(t.driver):''}${t.driverPh?' · '+esc(t.driverPh):''}`,
     btn('→ رجوع',"go('trips')",'')+`<select onchange="setTripStatus(this.value)" style="padding:9px;border:1px solid #dce5f0;border-radius:9px">${Object.keys(TRIP_ST).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TRIP_ST[k]}</option>`).join('')}</select>`+btn('تعديل بيانات الرحلة','editTrip()','soft')+btn('🖨 منفستو الرحلة','printManifest()','soft')+btn('📝 منفستو فرعي','subList()','soft')+btn('عفش متخلف','leftModal(\'\')','soft')+btn('🗑 حذف الرحلة','delTrip(curTrip)',''))+
   `<div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>العفش في الرحلة (${ps.length} قطعة)</h3>${btn('＋ إضافة عفش للرحلة','pickForTrip()')}</div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>البوليصة</th><th>الوجهة</th><th>القطع</th><th>العدد</th><th>المخزن</th><th>الدفع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
-  <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>مصاريف الرحلة</h3>${btn('＋ إضافة مصروف','addExp()')}</div><div class="notice" style="margin-bottom:12px">المصاريف العامة (وقود، تحميل...) بالجنيه المصري، والجمركية بالجنيه السوداني (ج.س) وبتتقسم على العملاء. الاتنين بعيد تماماً عن صافي الرحلة.</div><div class="tablewrap"><table><thead><tr><th>النوع</th><th>البند</th><th>المبلغ</th><th>التاريخ</th><th></th></tr></thead><tbody>${exp}</tbody></table></div><div id="packBox"></div></div>
+  <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>المنصرفات الجمركية</h3>${btn('＋ إضافة مصروف','addExp()')}</div><div class="notice" style="margin-bottom:12px">المنصرفات الجمركية والإضافية (جمارك، ضرائب، محلية…) بالجنيه السوداني (ج.س)، وبتتقسم على العملاء. المنصرفات العامة على الشركة (وقود، تغليف، عمالة) بتتكتب في نافذة «المنصرفات والحسابات».</div><div class="tablewrap"><table><thead><tr><th>البند</th><th>المبلغ</th><th>التاريخ</th><th></th></tr></thead><tbody>${exp}</tbody></table></div><div id="packBox"></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panelhead"><h3>تقسيم الرسوم الجمركية على العملاء <span style="font-size:12px;color:#c46d10">(بالجنيه السوداني ج.س)</span></h3><span></span></div>
   <div id="shareSum"></div><div class="tablewrap"><table><thead><tr><th>العميل</th><th>عدد القطع</th><th>رسوم الشحن (للمعلومية)</th><th>نصيبه من الرسوم الجمركية</th><th>المدفوع</th><th>المتبقي</th><th></th></tr></thead><tbody>${shareRows}</tbody></table></div></div>
   <div class="panel"><div class="panelhead"><h3>ملخص الرحلة</h3></div><div id="tripSum"></div></div>`;
@@ -417,12 +418,30 @@ customs:()=>{
   `<div class="panel"><div class="tablewrap"><table><thead><tr><th>الرحلة</th><th>التاريخ</th><th>الرسوم الجمركية (مصروف) ج.س</th><th>الموزّع على العملاء ج.س</th><th>المحصّل ج.س</th><th>المتبقي على العملاء</th><th>التوزيع</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 },
 reports:()=>{
-  let T={A:0,gen:0,cus:0,dist:0,net:0};
-  const rows=db.trips.map((t,i)=>{const n=tripNums(t);['A','gen','cus','dist','net'].forEach(k=>T[k]+=n[k]);
-    return `<tr><td>${esc(t.no)}</td><td>${esc(t.date)}</td><td>${n.ps.length}</td><td>${num(n.A)}</td><td><b style="color:#159B72">${num(n.net)}</b></td><td>${num(n.gen)}</td><td>${num(n.cus)}</td><td>${num(n.dist)}</td><td>${btn('فتح',`openTrip(${i})`,'soft')}</td></tr>`}).join('')||emptyRow(9,'لا توجد رحلات');
-  return pageHead('تقارير الرحلات','صافي كل رحلة = الرسوم المحصّلة بس. المصاريف العامة والرسوم الجمركية معروضة لوحدها للمعلومية ومش داخلة في الصافي')+
-  `<div class="panel"><div class="tablewrap"><table><thead><tr><th>الرحلة</th><th>التاريخ</th><th>القطع</th><th>الرسوم المحصّلة (ج)</th><th>الصافي (ج)</th><th>مصاريف عامة للمعلومية (ج)</th><th>رسوم جمركية مصروف (ج.س)</th><th>جمركية موزّعة (ج.س)</th><th></th></tr></thead><tbody>${rows}<tr style="font-weight:bold;background:#fafcff"><td colspan="3">الإجمالي</td><td>${num(T.A)}</td><td>${num(T.net)}</td><td>${num(T.gen)}</td><td>${num(T.cus)}</td><td>${num(T.dist)}</td><td></td></tr></tbody></table></div></div>`;
+  let T={ship:0,pack:0,out:0,cus:0,dist:0,net:0};
+  const rows=db.trips.map((t,i)=>{const n=tripNums(t);Object.keys(T).forEach(k=>T[k]+=n[k]);
+    return `<tr><td>${esc(t.no)}</td><td>${esc(t.date)}</td><td>${n.ps.length}</td><td>${num(n.ship)}</td><td>${num(n.pack)}</td><td>${num(n.out)}</td><td><b style="color:${n.net>=0?'#159B72':'#D94C55'}">${num(n.net)}</b></td><td>${num(n.cus)}</td><td>${num(n.dist)}</td><td>${btn('فتح',`openTrip(${i})`,'soft')}</td></tr>`}).join('')||emptyRow(10,'لا توجد رحلات');
+  return pageHead('تقارير الرحلات','صافي كل رحلة = (الشحن + التغليف) − المنصرفات العامة والتغليف والعمالة. الرسوم الجمركية منفصلة بالجنيه السوداني')+
+  `<div class="panel"><div class="tablewrap"><table><thead><tr><th>الرحلة</th><th>التاريخ</th><th>القطع</th><th>الشحن (ج)</th><th>التغليف (ج)</th><th>المنصرفات (ج)</th><th>الصافي (ج)</th><th>رسوم جمركية مصروف (ج.س)</th><th>جمركية موزّعة (ج.س)</th><th></th></tr></thead><tbody>${rows}<tr style="font-weight:bold;background:#fafcff"><td colspan="3">الإجمالي</td><td>${num(T.ship)}</td><td>${num(T.pack)}</td><td>${num(T.out)}</td><td>${num(T.net)}</td><td>${num(T.cus)}</td><td>${num(T.dist)}</td><td></td></tr></tbody></table></div></div>`;
 },
+accounts:()=>{
+  const t=accTrip!=null?db.trips.find(x=>x.id===accTrip):null;
+  if(!t){accTrip=null;let T={ship:0,pack:0,out:0,net:0};
+    const rows=db.trips.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(t=>{const n=tripNums(t);Object.keys(T).forEach(k=>T[k]+=n[k]);
+      return `<tr style="cursor:pointer" onclick="accTrip=${t.id};go('accounts')"><td><b>${esc(t.no)}</b></td><td>${esc(t.date||'')}</td><td>${esc(t.dest||'—')}</td><td>${num(n.ship)}</td><td>${num(n.pack)}</td><td>${n.out?num(n.out):'<span style="color:#c98617">لم تُسجّل</span>'}</td><td><b style="color:${n.net>=0?'#159B72':'#D94C55'}">${num(n.net)}</b></td><td>${btn('فتح',`accTrip=${t.id};go('accounts')`,'soft')}</td></tr>`}).join('')||emptyRow(8,'لا توجد رحلات');
+    return pageHead('المنصرفات والحسابات','اختار رحلة عشان تكتب منصرفاتها وتشوف صافيها')+
+    `<div class="panel"><div class="tablewrap"><table><thead><tr><th>الرحلة</th><th>التاريخ</th><th>الوجهة</th><th>الشحن (ج)</th><th>التغليف (ج)</th><th>المنصرفات (ج)</th><th>الصافي (ج)</th><th></th></tr></thead><tbody>${rows}<tr style="font-weight:bold;background:#fafcff"><td colspan="3">الإجمالي</td><td>${num(T.ship)}</td><td>${num(T.pack)}</td><td>${num(T.out)}</td><td>${num(T.net)}</td><td></td></tr></tbody></table></div></div>`}
+  const n=tripNums(t),pk=tripPackCosts(t),ed=can('accounts','edit');
+  const card=(l,v,c,sub)=>`<div class="stat"><div><small>${l}</small><strong style="${c?'color:'+c:''}">${num(v)} <span style="font-size:11px;font-weight:normal;color:#73849B">ج</span></strong>${sub?`<div style="font-size:11px;color:#73849B;margin-top:4px">${sub}</div>`:''}</div></div>`;
+  const inp=(k,l,hint)=>`<div class="field" style="margin:0"><label>${l}</label><input type="number" min="0" inputmode="decimal" value="${n[k==='gen'?'gen':k==='pack'?'packExp':'labor']||''}" placeholder="0" ${ed?'':'disabled'} onfocus="this.select()" onchange="setAcc('${k}',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"><small style="color:#73849B;font-size:11px">${hint}</small></div>`;
+  return pageHead('حسابات رحلة '+esc(t.no),`${esc(t.dest||'')} · ${esc(t.date||'')} · ${n.ps.length} قطعة`,btn('→ كل الرحلات','accTrip=null;go(\'accounts\')','')+btn('🚚 فتح الرحلة',`openTrip(${db.trips.indexOf(t)})`,'soft'))+
+  `<p style="margin:0 0 8px;font-weight:bold">الإيرادات (من البواليص بعد الخصم)</p>
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${card('إجمالي الشحن',n.ship)}${card('إجمالي التغليف والتخشيب',n.pack,'',pk.by.map(x=>esc(x[0])+': '+num(x[1])).join(' · '))}${card('الإجمالي',n.ship+n.pack,'#12345A')}</div>
+  <div class="panel" style="margin:6px 0 16px"><div class="panelhead"><h3>المنصرفات على الشركة</h3><small>${ed?'اكتب كل منصرف رقم واحد، وبيتحفظ لوحده':'للعرض بس'}</small></div>
+  <div class="formgrid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">${inp('gen','المنصرفات العامة على الشركة (ج)','وقود، سائق، تحميل…')}${inp('pack','منصرف التغليف والتخشيب (ج)','اللي اتصرف فعلاً على الخامات')}${inp('labor','منصرف العمالة (ج)','')}</div></div>
+  <p style="margin:0 0 8px;font-weight:bold">النتيجة</p>
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${card('مكسب التغليف',n.packProfit,n.packProfit>=0?'#159B72':'#D94C55',`${num(n.pack)} على العملاء − ${num(n.packExp)} منصرف`)}${card('إجمالي المنصرفات',n.out,'#D94C55')}${card('صافي الرحلة',n.net,n.net>=0?'#159B72':'#D94C55')}</div>
+  <div class="notice">صافي الرحلة = (الشحن ${num(n.ship)} + التغليف ${num(n.pack)}) − المنصرفات العامة ${num(n.gen)} − منصرف التغليف ${num(n.packExp)} − العمالة ${num(n.labor)} = <b>${num(n.net)} ج</b>. الرسوم الجمركية مش داخلة في الحساب ده.</div>`},
 soon:()=>pageHead(names[current]||'','هذه الصفحة هتتفعّل في الخطوات الجاية')+`<div class="notice">هنبدأ بالعملاء وقائمة الأسعار والبوليصة، وبعدين نكمل باقي الصفحات واحدة واحدة.</div>`,
 home:()=>{window.__dashSeen=true;return dashHTML()},
 customers:()=>{
@@ -660,25 +679,33 @@ function tripOfShipment(s){const p=(s.pieces||[]).find(x=>x.trip);return p?db.tr
 function tripNums(t){
   const ps=tripPieces(t),ex=t.expenses||[],sh=t.shares||{};
   const A=ps.reduce((a,x)=>a+(+x.p.cost||0),0);
-  const gen=ex.filter(e=>e.kind!=='customs').reduce((a,e)=>a+e.amount,0),cus=ex.filter(e=>e.kind==='customs').reduce((a,e)=>a+e.amount,0);
+  const cus=ex.filter(e=>e.kind==='customs').reduce((a,e)=>a+(+e.amount||0),0);
   const dist=tripCustomers(t).reduce((a,c)=>a+(+sh[c.code]||0),0);
   const cp=t.cpay||{},cpaid=tripCustomers(t).reduce((a,c)=>a+(cp[c.code]||[]).reduce((b,x)=>b+(+x.amount||0),0),0);
-  return {ps,A,gen,cus,dist,cpaid,net:A};
-}
+  const ac=tripAcc(t),pk=tripPackCosts(t),out=ac.gen+ac.pack+ac.labor;
+  return {ps,A,cus,dist,cpaid,ship:pk.ship,pack:pk.pack,gen:ac.gen,packExp:ac.pack,labor:ac.labor,out,packProfit:pk.pack-ac.pack,net:pk.ship+pk.pack-out}}
+/* منصرفات الرحلة على الشركة (رقم واحد لكل نوع). المصاريف العامة القديمة اللي كانت في صفحة الرحلة بتتنقل هنا */
+function tripAcc(t){const a=t.acc||{};const oldGen=(t.expenses||[]).filter(e=>e.kind!=='customs').reduce((s,e)=>s+(+e.amount||0),0);
+  return {gen:a.gen!=null?+a.gen||0:oldGen,pack:+a.pack||0,labor:+a.labor||0}}
+let accTrip=null;
+function setAcc(k,v){const t=db.trips.find(x=>x.id===accTrip);if(!t)return;const a=tripAcc(t);t.acc={gen:a.gen,pack:a.pack,labor:a.labor};t.acc[k]=Math.max(+v||0,0);
+  t.expenses=(t.expenses||[]).filter(e=>e.kind==='customs');save();toast('اتحفظ');go('accounts')}
+function migrateAcc(){let n=0;db.trips.forEach(t=>{const old=(t.expenses||[]).filter(e=>e.kind!=='customs');if(!old.length)return;
+  const a=tripAcc(t);t.acc={gen:a.gen,pack:a.pack,labor:a.labor};t.expenses=(t.expenses||[]).filter(e=>e.kind==='customs');n++});if(n)save();return n}
+
 function refreshTrip(){
   const t=db.trips[curTrip];if(!t||!$('#tripSum'))return;const n=tripNums(t),rest=n.cus-n.dist;
   $('#shareSum').innerHTML=`<p style="font-size:13px;margin:0 0 12px">إجمالي الرسوم الجمركية: <b>${num(n.cus)} ج.س</b> · الموزّع: <b>${num(n.dist)} ج.س</b> · ${rest===0?'<b style="color:#159B72">تم تقسيمها بالكامل ✓</b>':'<b style="color:#c98617">المتبقي بدون توزيع: '+num(rest)+' ج.س</b>'} · دوس «تحديد رسوم القطع» جنب كل عميل وحدد رسوم كل قطعة، وبعدها تظهرلك رسالة واتساب ليه</p>`;
   const box=(l,v,c,u)=>`<div class="stat"><div><small>${l}</small><strong style="${c?'color:'+c:''}">${num(v)} <span style="font-size:11px;font-weight:normal;color:#73849B">${u||'ج'}</span></strong></div></div>`;
   const pk=tripPackCosts(t);
   $('#packBox').innerHTML=`<div style="margin-top:14px;padding:12px 14px;border-radius:12px;background:#f5f8fc;font-size:13px;line-height:2">
-    <b>تكاليف التغليف والتخشيب لكل عملاء الرحلة:</b> <b style="font-size:16px;color:#12345A">${num(pk.pack)} ج</b>
+    <b>إجمالي التغليف والتخشيب على عملاء الرحلة (بعد الخصم):</b> <b style="font-size:16px;color:#12345A">${num(pk.pack)} ج</b>
     ${pk.by.length?`<div style="font-size:12px;color:#56677f">${pk.by.map(x=>esc(x[0])+': <b>'+num(x[1])+' ج</b> ('+x[2]+' قطعة)').join(' · ')}</div>`:''}
-    <div style="font-size:12px;color:#56677f">إجمالي سعر الشحن لقطع الرحلة: <b>${num(pk.ship)} ج</b></div></div>`;
+    <div style="font-size:12px;color:#56677f">إجمالي الشحن لقطع الرحلة (بعد الخصم): <b>${num(pk.ship)} ج</b></div></div>`;
   const crest=n.dist-n.cpaid;
-  $('#tripSum').innerHTML=`<p style="margin:0 0 8px;font-weight:bold">أولاً: صافي الرحلة (بالجنيه المصري)</p><div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${box('رسوم الشحن المحصّلة',n.A)}${box('منها تغليف وتخشيب',pk.pack)}${box('صافي الرحلة',n.net,'#159B72')}</div>
-  <p style="margin:0 0 14px;font-size:11.5px;color:#73849B">صافي الرحلة = الرسوم المحصّلة بس. المصاريف (الوقود وغيره) والرسوم الجمركية بعيدة عنه تماماً.</p>
-  <p style="margin:12px 0 8px;font-weight:bold">ثانياً: المصاريف العامة (للمعلومية · مش داخلة في الصافي)</p><div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${box('المصاريف العامة (وقود وغيره)',n.gen)}</div>
-  <p style="margin:12px 0 8px;font-weight:bold">ثالثاً: الرسوم الجمركية (منفصلة · بالجنيه السوداني)</p><div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${box('المصروف الفعلي',n.cus,'','ج.س')}${box('الموزّع على العملاء',n.dist,'','ج.س')}${box('المحصّل من العملاء',n.cpaid,'#159B72','ج.س')}${box('المتبقي على العملاء',crest,crest>0?'#c98617':'#159B72','ج.س')}</div>`;
+  $('#tripSum').innerHTML=`<p style="margin:0 0 8px;font-weight:bold">أولاً: حساب الرحلة (بالجنيه المصري)</p><div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${box('إجمالي الشحن',n.ship)}${box('إجمالي التغليف والتخشيب',n.pack)}${box('المنصرفات (عامة + تغليف + عمالة)',n.out,'#D94C55')}${box('صافي الرحلة',n.net,n.net>=0?'#159B72':'#D94C55')}</div>
+  <p style="margin:0 0 14px;font-size:11.5px;color:#73849B">صافي الرحلة = (الشحن + التغليف) − المنصرفات العامة − منصرف التغليف − العمالة. المنصرفات بتتكتب في نافذة «المنصرفات والحسابات»${can('accounts','view')?` <a href="javascript:void(0)" onclick="accTrip=${t.id};go('accounts')" style="color:#1d67bd">← افتحها</a>`:''}.</p>
+  <p style="margin:12px 0 8px;font-weight:bold">ثانياً: الرسوم الجمركية (منفصلة · بالجنيه السوداني)</p><div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${box('المصروف الفعلي',n.cus,'','ج.س')}${box('الموزّع على العملاء',n.dist,'','ج.س')}${box('المحصّل من العملاء',n.cpaid,'#159B72','ج.س')}${box('المتبقي على العملاء',crest,crest>0?'#c98617':'#159B72','ج.س')}</div>`;
 }
 const origGo=go;
 go=function(p){origGo(p);if(p==='trip')refreshTrip()};
@@ -821,9 +848,9 @@ function renderPick(){
     <div style="display:none">${arr.map(y=>`<label style="display:flex;gap:10px;align-items:center;padding:5px 30px;font-size:12px"><input type="checkbox" class="pchk2" value="${y.ci}_${y.si}_${y.pi}" style="width:auto"> ${esc(pieceLabel(y.p))} <span style="color:#73849B;font-size:11px">${pieceCode(y.s,y.pi)} · ${esc(whName(y.p.wh))}</span></label>`).join('')}</div></div>`}).join('')||'<p style="color:#73849B;text-align:center;padding:20px">لا يوجد عفش مخزّن متاح للرحلة. خزّن العفش في المخازن الأول.</p>';
 }
 function addExp(){
-  openModal('إضافة مصروف',`<div class="formgrid">${field('النوع',`<select id="xKind"><option value="general">عامة (على الشركة) — بالجنيه المصري</option><option value="customs">إضافية / جمركية (تتقسم على العملاء) — بالجنيه السوداني</option></select>`)}
-  ${field('البند',`<input id="xName" list="xDL" placeholder="وقود / جمارك / محلية...">${dl('xDL',['وقود','تحميل','سائق','جمارك','ضرائب','محلية','غرفة تجارية','مصاريف طريق','عمالة','أتعاب تخليص'])}`)}
-  ${field('المبلغ <span style="font-size:11px;color:#73849B">(العامة: ج · الجمركية: ج.س)</span>',`<input id="xAmt" type="number" min="0">`)}${field('التاريخ',`<input id="xDate" type="date" value="${today()}">`)}</div>`,()=>{
+  openModal('إضافة مصروف جمركي',`<div class="formgrid"><input type="hidden" id="xKind" value="customs">
+  ${field('البند',`<input id="xName" list="xDL" placeholder="جمارك / ضرائب / محلية...">${dl('xDL',['جمارك','ضرائب','محلية','غرفة تجارية','خيمة','مصاريف طريق','عمالة','استضافة','بوليصة','أتعاب تخليص','جمعية'])}`)}
+  ${field('المبلغ (ج.س)',`<input id="xAmt" type="number" min="0">`)}${field('التاريخ',`<input id="xDate" type="date" value="${today()}">`)}</div>`,()=>{
     const a=+$('#xAmt').value,n=$('#xName').value.trim();if(!n||!(a>0)){toast('اكتب البند والمبلغ');return false}
     db.trips[curTrip].expenses.push({kind:$('#xKind').value,name:n,amount:a,date:$('#xDate').value});save();go('trip');return true})}
 function delExp(i){db.trips[curTrip].expenses.splice(i,1);save();go('trip')}
@@ -833,8 +860,9 @@ const cusPaid=(t,c)=>((t.cpay||{})[c.code]||[]).reduce((a,x)=>a+(+x.amount||0),0
 function tripPackCosts(t){let ship=0,pack=0;const by=new Map(),seen=new Set();
   tripPieces(t).forEach(x=>{const s=x.s;if(seen.has(s))return;seen.add(s);
     const lineOf=[];s.lines.forEach(l=>{for(let k=0;k<(+l.qty||0);k++)lineOf.push(l)});let pos=0;
+    const bsum=lineOf.reduce((a,l)=>a+(+l.price||0)+(+l.stateCost||0),0),r=bsum?Math.max(1-Math.min(Math.max(+s.discount||0,0),bsum)/bsum,0):1;/* بعد الخصم */
     sUnits(s).forEach(u=>{const ls=lineOf.slice(pos,pos+u.w);pos+=u.w;const inTrip=u.ps.filter(p=>p.trip===t.id).length;if(!inTrip||!ls.length)return;const f=inTrip/u.ps.length;
-      ls.forEach(l=>{ship+=(+l.price||0)*f;const pc=(+l.stateCost||0)*f;pack+=pc;
+      ls.forEach(l=>{ship+=(+l.price||0)*f*r;const pc=(+l.stateCost||0)*f*r;pack+=pc;
         if(pc){const k=String(l.status||'').trim()||'أخرى',e=by.get(k)||[0,0];e[0]+=pc;by.set(k,e)}});
       const pc0=ls.some(l=>+l.stateCost);if(pc0){const k=String(ls[0].status||'').trim()||'أخرى',e=by.get(k)||[0,0];e[1]+=inTrip;by.set(k,e)}})});
   return {ship:Math.round(ship),pack:Math.round(pack),by:[...by].map(([k,v])=>[k,Math.round(v[0]),v[1]])}}
@@ -1387,7 +1415,7 @@ function printAllPriceLists(){
 
 /* ---------- init ---------- */
 document.querySelectorAll('.brandmark img').forEach(i=>i.src=LOGO);
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='prices')priceDest='';if(b.dataset.page==='delivery')dlvTrip=null;go(b.dataset.page)}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='prices')priceDest='';if(b.dataset.page==='delivery')dlvTrip=null;if(b.dataset.page==='accounts')accTrip=null;go(b.dataset.page)}));
 $('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');setupTopNav();
 $('#closeModal').onclick=closeModal;
 $('#saveModal').onclick=()=>{if(modalSave){const r=modalSave();if(r!==false)closeModal()}};
@@ -1426,7 +1454,7 @@ const checkPw=(u,pw)=>u.ph?hashPw(pw,u.salt)===u.ph:u.password===pw;
 let ME=null;
 db.users=db.users||[{id:1,username:'admin',password:'1234',name:'مدير النظام',role:'مدير',admin:true}];
 db.users.forEach(u=>{if(u.admin===undefined&&u.role==='مدير')u.admin=true;u.perms=u.perms||{};if(u.password!==undefined&&!u.ph){const was=u.password;setPw(u,was);if(was==='1234')u.mustChange=true}});save();
-const PG=[['home','الرئيسية'],['customers','العملاء'],['prices','قائمة الأسعار'],['warehouses','المخازن'],['delivery','استلام السودان'],['trips','الرحلات'],['customs','الرسوم الإضافية'],['reports','التقارير']];
+const PG=[['home','الرئيسية'],['customers','العملاء'],['prices','قائمة الأسعار'],['warehouses','المخازن'],['delivery','استلام السودان'],['trips','الرحلات'],['customs','الرسوم الإضافية'],['accounts','المنصرفات والحسابات'],['reports','التقارير']];
 const TPL={'مبيعات':{home:'view',customers:'edit',prices:'view'},
  'محاسب':{home:'view',customers:'edit',prices:'view',customs:'view',reports:'view'},
  'أمين مخزن':{home:'view',customers:'view',warehouses:'edit',trips:'edit'},
@@ -1607,7 +1635,7 @@ async function bootCloud(){
   const pr=await SB.from('profiles').select('*').eq('id',s.user.id).maybeSingle();if(pr.error)throw pr.error;
   if(!pr.data)throw new Error('الحساب غير موجود في النظام، راجع المدير');
   if(!pr.data.active)throw new Error('حسابك غير مفعّل، راجع المدير');
-  const X=await loadAll();applyData(X,s.user.id);READY=true;startPolling();setTimeout(()=>{try{fixSplits()}catch(e){console.error(e)}},1500)}
+  const X=await loadAll();applyData(X,s.user.id);READY=true;startPolling();setTimeout(()=>{try{fixSplits()}catch(e){console.error(e)}try{migrateAcc()}catch(e){console.error(e)}},1500)}
 async function reloadCloud(){const uid=ME&&ME.uid;const X=await loadAll();applyData(X,uid)}
 
 async function pushNow(){
